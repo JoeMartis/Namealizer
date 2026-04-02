@@ -141,6 +141,9 @@ const ISSUE_TYPES = {
   neardupe:  { label: 'Near Duplicate', cls: 'tag-duplicate', confidence: 'medium' },
   initial:   { label: 'Single Initial', cls: 'tag-initial', confidence: 'low' },
   spelling:  { label: 'Possible Typo', cls: 'tag-spelling', confidence: 'low' },
+  title:     { label: 'Has Title/Honorific', cls: 'tag-format', confidence: 'high' },
+  merged:    { label: 'Merged Entry', cls: 'tag-data', confidence: 'high' },
+  truncated: { label: 'Possibly Truncated', cls: 'tag-data', confidence: 'medium' },
 };
 
 // Per-issue confidence can be overridden by detection logic
@@ -170,6 +173,9 @@ function getConfidence(issueType, detail) {
     if (detail && detail.includes('quotes')) return 'high';
     return 'high';
   }
+  if (issueType === 'title') return 'high';
+  if (issueType === 'merged') return 'high';
+  if (issueType === 'truncated') return 'medium';
   return ISSUE_TYPES[issueType]?.confidence || 'low';
 }
 
@@ -401,6 +407,13 @@ function issueDetail(issueType, name) {
       if (tparts.some(p => p === p.toUpperCase() && p.length > 1 && /[A-Z]/.test(p)) &&
           tparts.some(p => p !== p.toUpperCase() && p.length > 1)) return 'Mixed: some parts ALL CAPS';
       return 'Unusual formatting';
+    case 'title':
+      const titleMatch = clean.split(/\s+/)[0];
+      return 'Contains title/honorific: "' + titleMatch + '"';
+    case 'merged':
+      return 'Possible two people in one entry (contains "&" or "and")';
+    case 'truncated':
+      return 'Name may be truncated (' + clean.length + ' chars, ends abruptly)';
     default: return '';
   }
 }
@@ -526,6 +539,29 @@ function detectIssues(name) {
     if (/(.)\1\1/.test(lo) && !issues.includes('spelling')) issues.push('spelling');
   }
 
+  // Titles/honorifics that shouldn't be in a name list
+  const TITLES = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.?$/i;
+  if (tokens.length >= 2 && TITLES.test(tokens[0].replace(/\./g, ''))) {
+    issues.push('title');
+  }
+
+  // Merged entries: two people in one field
+  if (/\s(&|and|\/)\s/i.test(trimmed) || /&/.test(trimmed)) {
+    issues.push('merged');
+  }
+
+  // Possible truncation: name ends mid-word or at common field-length boundaries
+  if (trimmed.length >= 20) {
+    const endsLower = /[a-z]$/.test(trimmed) && !/[aeiouy]$/.test(trimmed.toLowerCase());
+    const atBoundary = [20, 25, 30, 40, 50].includes(trimmed.length);
+    if (atBoundary && endsLower) issues.push('truncated');
+  }
+
+  // All-initials entry: "J.S." or "R.K.M."
+  if (/^([A-Z]\.?\s*){2,}$/.test(trimmed) && trimmed.replace(/[^A-Z]/g, '').length <= 5) {
+    if (!issues.includes('initial')) issues.push('initial');
+  }
+
   return [...new Set(issues)];
 }
 
@@ -558,23 +594,35 @@ function markDuplicates() {
   const norms = entries.map(e => normalize(e.current));
   const active = entries.map((e, i) => !e.dismissed && norms[i].length > 0);
 
+  // Use a Map for O(n) exact duplicate detection (handles 3+ dupes)
+  const normMap = new Map();
+  for (let i = 0; i < entries.length; i++) {
+    if (!active[i]) continue;
+    const key = norms[i];
+    if (!normMap.has(key)) { normMap.set(key, []); }
+    normMap.get(key).push(i);
+  }
+  for (const indices of normMap.values()) {
+    if (indices.length < 2) continue;
+    for (const i of indices) {
+      const others = indices.filter(j => j !== i);
+      if (!entries[i].issues.includes('duplicate')) {
+        entries[i].issues.push('duplicate');
+        entries[i].details.push('Same name as row(s) ' + others.map(j => j + 1).join(', '));
+      }
+    }
+  }
+
+  // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow)
+  if (entries.length > 500) return;
+
   for (let i = 0; i < entries.length; i++) {
     if (!active[i]) continue;
     for (let j = i + 1; j < entries.length; j++) {
       if (!active[j]) continue;
 
-      // Exact duplicate (after normalization)
-      if (norms[i] === norms[j]) {
-        if (!entries[i].issues.includes('duplicate')) {
-          entries[i].issues.push('duplicate');
-          entries[i].details.push('Same name as row ' + (j + 1));
-        }
-        if (!entries[j].issues.includes('duplicate')) {
-          entries[j].issues.push('duplicate');
-          entries[j].details.push('Same name as row ' + (i + 1));
-        }
-        continue;
-      }
+      // Skip exact duplicates (already handled above)
+      if (norms[i] === norms[j]) continue;
 
       // Near duplicate: edit distance <= 2 for names of reasonable length
       // or same letters in different order (reversed parts)
@@ -608,6 +656,10 @@ function suggestFix(name) {
 
   // Strip CSV-style wrapping quotes and normalize tabs
   fixed = fixed.replace(/^"|"$/g, '').replace(/\t/g, ' ');
+
+  // Strip titles/honorifics
+  const TITLE_RE = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.?\s+/i;
+  fixed = fixed.replace(TITLE_RE, '');
 
   // Handle "Last, First" format -> "First Last"
   const commaMatch = fixed.match(/^([A-Za-z\u00C0-\u024F'-]+)\s*,\s*(.+)$/);
@@ -705,9 +757,9 @@ function titleWord(s) {
 
   const lo = s.toLowerCase();
 
-  // Mc prefix: McDonald, McBride
+  // Mc prefix: McDonald, McBride (need at least 3 chars)
   if (lo.startsWith('mc') && s.length > 2) {
-    return 'Mc' + s[2].toUpperCase() + s.slice(3).toLowerCase();
+    return 'Mc' + (s[2] || '').toUpperCase() + s.slice(3).toLowerCase();
   }
 
   // Mac prefix: only if original had internal cap (MacArthur) to avoid overcorrecting (Macula)
@@ -938,6 +990,7 @@ function stripDupeIssues() {
 
 // Extract surname for sorting: last significant word (skip suffixes like Jr, II, III)
 function getSurname(name) {
+  if (!name) return '';
   const parts = name.trim().split(/\s+/);
   // Walk backwards to find the last non-suffix, non-particle word
   for (let i = parts.length - 1; i >= 0; i--) {
@@ -1059,7 +1112,12 @@ Tran Duc Minh
 Micheal Johnson
 Michael Johnson
 Roberto Sanchez
-Roberta Sanchez`;
+Roberta Sanchez
+Dr. James Wilson
+Mr. Robert Taylor
+John & Mary Smith
+R.K.
+J.S.M.`;
 }
 
 function clearAll() {
