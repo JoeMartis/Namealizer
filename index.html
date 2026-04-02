@@ -336,7 +336,7 @@ function issueDetail(issueType, name) {
       if (/\d/.test(name)) return 'Contains numbers';
       if (PLACEHOLDERS.has(name.trim().toLowerCase())) return 'Placeholder entry';
       if (/\xC3[\x80-\xBF]/.test(name)) return 'Possible encoding issue (mojibake)';
-      if (/[<>@#$%^&*=+{}[\]|\\~`]/.test(name)) return 'Contains special characters';
+      if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(name)) return 'Contains special characters';
       return 'Data entry error';
     case 'initial':
       return 'Single-letter initial(s) — may be truncated';
@@ -369,7 +369,7 @@ function detectIssues(name) {
 
   // Data errors
   if (/\d/.test(trimmed)) issues.push('data');
-  if (/[<>@#$%^&*=+{}[\]|\\~`]/.test(trimmed)) issues.push('data');
+  if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(trimmed)) issues.push('data');
   if (/\xC3[\x80-\xBF]/.test(trimmed)) issues.push('data'); // mojibake
 
   // Spacing issues
@@ -556,7 +556,7 @@ function suggestFix(name) {
   fixed = fixed.replace(/[0-9]/g, '');
 
   // Remove clearly invalid characters but keep apostrophes, hyphens, periods, parens, accented
-  fixed = fixed.replace(/[<>@#$%^&*=+{}[\]|\\~`]/g, '');
+  fixed = fixed.replace(/[<>@#$%^&*=+{}\[\]|\\~`]/g, '');
 
   // Normalize spacing
   fixed = fixed.replace(/\s+/g, ' ').trim();
