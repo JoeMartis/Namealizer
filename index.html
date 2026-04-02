@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Namealizer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f7fa; --surface: #ffffff; --border: #dde1e6;
+    --text: #1a1a2e; --text-muted: #6b7280;
+    --primary: #4f46e5; --primary-hover: #4338ca;
+    --success: #10b981;
+    --tag-reversed: #fef3c7; --tag-reversed-text: #92400e;
+    --tag-caps: #fce7f3; --tag-caps-text: #9d174d;
+    --tag-spacing: #e0e7ff; --tag-spacing-text: #3730a3;
+    --tag-data: #fee2e2; --tag-data-text: #991b1b;
+    --tag-format: #f3e8ff; --tag-format-text: #6b21a8;
+    --tag-duplicate: #ccfbf1; --tag-duplicate-text: #065f46;
+    --tag-initial: #fff7ed; --tag-initial-text: #9a3412;
+    --tag-spelling: #fdf2f8; --tag-spelling-text: #831843;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+  .container { max-width: 1060px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
+  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; }
+  textarea { width: 100%; min-height: 160px; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.9rem; resize: vertical; line-height: 1.6; }
+  textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .btn-row { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+  button { padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  button:hover { background: var(--bg); }
+  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+  .btn-success:hover { opacity: 0.9; }
+  .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-muted); }
+  .stats span { white-space: nowrap; }
+  .stats strong { color: var(--text); }
+  .results-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  .results-table th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); }
+  .results-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .results-table tr:last-child td { border-bottom: none; }
+  .results-table tr:hover td { background: #f9fafb; }
+  .row-clean td { opacity: 0.55; }
+  .original-name { color: var(--text-muted); font-size: 0.8rem; }
+  .name-input { width: 100%; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.875rem; font-family: inherit; }
+  .name-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .tag { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
+  .tag-reversed { background: var(--tag-reversed); color: var(--tag-reversed-text); }
+  .tag-caps { background: var(--tag-caps); color: var(--tag-caps-text); }
+  .tag-spacing { background: var(--tag-spacing); color: var(--tag-spacing-text); }
+  .tag-data { background: var(--tag-data); color: var(--tag-data-text); }
+  .tag-format { background: var(--tag-format); color: var(--tag-format-text); }
+  .tag-duplicate { background: var(--tag-duplicate); color: var(--tag-duplicate-text); }
+  .tag-initial { background: var(--tag-initial); color: var(--tag-initial-text); }
+  .tag-spelling { background: var(--tag-spelling); color: var(--tag-spelling-text); }
+  .action-btns { display: flex; gap: 0.3rem; }
+  .action-btns button { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
+  .filter-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .filter-btn { padding: 0.25rem 0.6rem; font-size: 0.78rem; border-radius: 20px; }
+  .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
+  .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+  @media (max-width: 640px) {
+    .results-table th:nth-child(3), .results-table td:nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Namealizer</h1>
+  <p class="subtitle">Paste a list of names (one per line) to detect formatting issues, duplicates, and data entry errors.</p>
+  <div class="card">
+    <h2>Input Names</h2>
+    <textarea id="nameInput" placeholder="Paste names here, one per line..."></textarea>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="analyze()">Analyze Names</button>
+      <button onclick="loadSample()">Load Sample</button>
+      <button onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+  <div id="resultsSection" style="display:none">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+        <h2 style="margin:0;">Results</h2>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div class="filter-bar" id="filterBar"></div>
+      <div style="overflow-x:auto;">
+        <table class="results-table">
+          <thead><tr>
+            <th style="width:28%">Name</th>
+            <th style="width:30%">Issues</th>
+            <th style="width:22%">Suggested Fix</th>
+            <th style="width:20%">Actions</th>
+          </tr></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="dismissedBar" class="card" style="display:none; padding:0.75rem 1.25rem;">
+      <span id="dismissedCount" style="font-size:0.85rem; color:var(--text-muted);"></span>
+      <button onclick="undoAllDismissed()" style="font-size:0.8rem; padding:0.2rem 0.6rem; margin-left:0.5rem;">Undo All</button>
+    </div>
+    <div class="btn-row" style="justify-content:flex-end;">
+      <button onclick="acceptAllSuggestions()">Accept All Suggestions</button>
+      <button onclick="copyToClipboard()">Copy to Clipboard</button>
+      <button class="btn-success" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-success" onclick="exportTxt()">Export Text</button>
+    </div>
+  </div>
+</div>
+<script>
+let entries = [];
+let activeFilter = 'all';
+
+const ISSUE_TYPES = {
+  reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed' },
+  caps:      { label: 'Capitalization', cls: 'tag-caps' },
+  spacing:   { label: 'Spacing/Punctuation', cls: 'tag-spacing' },
+  data:      { label: 'Data Error', cls: 'tag-data' },
+  format:    { label: 'Unusual Format', cls: 'tag-format' },
+  duplicate: { label: 'Duplicate', cls: 'tag-duplicate' },
+  neardupe:  { label: 'Near Duplicate', cls: 'tag-duplicate' },
+  initial:   { label: 'Single Initial', cls: 'tag-initial' },
+  spelling:  { label: 'Possible Typo', cls: 'tag-spelling' },
+};
+
+// Particles that are normally lowercase mid-name
+const PARTICLES = new Set([
+  'de','del','de la','de los','de las','da','do','dos','das',
+  'du','le','la','des','di','dal','della','dei','degli','delle','lo',
+  'van','van de','van den','van der','het','ter','ten',
+  'von','von der','zu','zum','zur',
+  'al','el','bin','ibn','bint','abu','al-','el-',
+  'ap','ab','y','e','i','und','of',
+]);
+
+// Single-word particles for quick lookup
+const SINGLE_PARTICLES = new Set([
+  'de','del','da','do','dos','das','du','le','la','des','di','dal',
+  'della','dei','degli','delle','lo','van','het','ter','ten','von',
+  'zu','zum','zur','al','el','bin','ibn','bint','abu','ap','ab',
+  'y','e','i','und','of',
+]);
+
+// Suffixes to detect and preserve
+const SUFFIXES = new Set(['jr','jr.','sr','sr.','i','ii','iii','iv','v','vi','vii','viii','esq','esq.','phd','ph.d.','md','m.d.']);
+
+// Placeholder/junk entries
+const PLACEHOLDERS = new Set(['n/a','na','none','test','null','unknown','xxx','asdf','tbd','pending','temp','dummy','sample','example']);
+
+// Valid short names (don't flag as errors)
+const VALID_SHORT = new Set(['ng','wu','hu','xu','yi','li','he','ye','ai','ed','al','jo','bo','le','na','ha','do','an','yu','lu','ma','ji','qi']);
+
+// Known valid consonant clusters (don't flag as typos)
+const VALID_CLUSTERS = ['sch','str','tch','chr','phr','thr','shr','schr','ght','ngs','ths','rth','nth','lph','mph','nch','ndz','mts','dz','tsk','vsk','szc','prz','trz'];
+
+// Common first/given names (international)
+const COMMON_FIRST = new Set([
+  // English
+  'james','mary','john','patricia','robert','jennifer','michael','linda','david','elizabeth',
+  'william','barbara','richard','susan','joseph','jessica','thomas','sarah','charles','karen',
+  'christopher','lisa','daniel','nancy','matthew','betty','anthony','margaret','mark','sandra',
+  'donald','ashley','steven','dorothy','paul','kimberly','andrew','emily','joshua','donna',
+  'kenneth','michelle','kevin','carol','brian','amanda','george','melissa','timothy','deborah',
+  'ronald','stephanie','edward','rebecca','jason','sharon','jeffrey','laura','ryan','cynthia',
+  'jacob','kathleen','gary','amy','nicholas','angela','eric','shirley','jonathan','anna',
+  'stephen','brenda','larry','pamela','justin','emma','scott','nicole','brandon','helen',
+  'benjamin','samantha','samuel','katherine','raymond','christine','gregory','debra','frank','rachel',
+  'alexander','carolyn','patrick','janet','jack','catherine','dennis','maria','jerry','heather',
+  'tyler','diane','aaron','ruth','jose','julie','adam','olivia','nathan','joyce','henry','virginia',
+  'peter','victoria','zachary','kelly','douglas','lauren','harold','christina','kathryn','joan',
+  'carl','evelyn','arthur','judith','gerald','megan','roger','andrea','keith','cheryl','jeremy',
+  'hannah','terry','jacqueline','sean','martha','austin','gloria','albert','teresa','joe','ann',
+  'jesse','sara','christian','madison','jared','frances','dylan','katrina','bruce','janice',
+  'gabriel','jean','lawrence','abigail','jordan','alice','wayne','judy','ralph','sophia','roy',
+  'grace','eugene','denise','randy','amber','philip','doris','harry','marilyn','vincent','danielle',
+  'bobby','beverly','johnny','isabella','logan','theresa','alex','natalie','oscar','marie',
+  // Spanish / Portuguese / Latin American
+  'carlos','pedro','luis','miguel','rosa','carmen','pablo','jorge','angel','sofia','santiago',
+  'diego','alejandro','fernando','roberto','ricardo','rafael','manuel','francisco','eduardo',
+  'gustavo','rodrigo','andres','mateo','sebastian','valentina','camila','mariana','gabriela',
+  'lucia','catalina','natalia','carolina','daniela','ana','beatriz','ines','pilar','teresa',
+  'joao','guilherme','thiago','lucas','matheus','felipe','rafael','renato','leticia','juliana',
+  // Arabic / Middle Eastern
+  'mohamed','ahmed','ali','omar','fatima','hassan','ibrahim','youssef','mustafa','khalid',
+  'tariq','rashid','nour','layla','amira','salma','zainab','aisha','hana','rania',
+  'abdallah','karim','samir','nadia','mariam','yusuf','hamza','bilal','sami','mona',
+  // East Asian given names
+  'wei','min','jun','yan','lei','jing','fang','xia','hong','ping','ling','mei','yun',
+  'xiaoming','xiaohua','jianjun','guoqiang','shuying','lili','xiaoli','minghui','haoran',
+  'hiroshi','yuki','kenji','takeshi','aki','haruto','yuto','sota','riku','hinata','sakura',
+  'aoi','hana','yui','mio','ren','kaito','sora','minato','akari','koharu',
+  'minho','jisoo','hyun','soomin','jiwon','eunji','seoyeon','yuna','jihye','donghyun',
+  'minh','thi','van','duc','huong','linh','hoa','thanh','tuan','nam','anh','nga','lan',
+  // South Asian (Indian, Pakistani, Bangladeshi, Sri Lankan)
+  'kumar','priya','deepak','anand','sanjay','raj','amit','rahul','suresh','vikram',
+  'arjun','arun','ravi','pooja','neha','sunita','rekha','anita','kavita','meera',
+  'rohit','nikhil','manish','pankaj','aarav','vivaan','aditya','vihaan','diya','saanvi',
+  'mohammed','abdul','imran','faisal','ayesha','nasreen','shabana','irfan','tariq','saleem',
+  'rani','lakshmi','sita','gita','radha','krishna','ganesh','shiva','durga','indira',
+  'harish','mahesh','ramesh','naresh','dinesh','rajesh','mukesh','suresh','yogesh','jitendra',
+  'suman','kiran','ashok','vinod','pramod','manoj','kamal','nandini','swati','divya',
+  'sneha','shruti','anjali','preeti','ritu','nisha','pallavi','shweta','ankita','tanvi',
+  'pranav','harsh','krish','reyansh','kabir','ishaan','dhruv','arnav','shaurya','atharv',
+  'naveen','prasad','chandra','mohan','gopal','hari','shankar','venkat','balaji','karthik',
+  // African
+  'kwame','kofi','ama','akua','yaw','adwoa','chidi','ngozi','obioma','amara',
+  'oluwaseun','adebayo','folake','temitope','chioma','emeka','nneka','obinna','sekou',
+  'fatou','ousmane','mamadou','amadou','boubacar','moussa','mariama','aissatou','abdoulaye',
+  // Russian / Eastern European
+  'anna','elena','olga','sergei','andrei','dmitri','vladimir','nina','svetlana','tatiana',
+  'alexei','mikhail','ivan','boris','yuri','pavel','oleg','viktor','natalya','ekaterina',
+  'jan','piotr','katarzyna','agnieszka','marek','tomasz','eva','marta','lukas','jakub',
+  // French / German
+  'pierre','jacques','francois','marie','sophie','isabelle','philippe','nicolas','arnaud','laurent',
+  'hans','klaus','dieter','stefan','andreas','monika','petra','ursula','helga','brigitte',
+]);
+
+// Common family/last names (international)
+const COMMON_LAST = new Set([
+  // English
+  'smith','johnson','williams','brown','jones','garcia','miller','davis','rodriguez','martinez',
+  'hernandez','lopez','gonzalez','wilson','anderson','thomas','taylor','moore','jackson','martin',
+  'lee','perez','thompson','white','harris','sanchez','clark','ramirez','lewis','robinson',
+  'walker','young','allen','king','wright','scott','torres','nguyen','hill','flores','green',
+  'adams','nelson','baker','hall','rivera','campbell','mitchell','carter','roberts','gomez',
+  'phillips','evans','turner','diaz','parker','cruz','edwards','collins','reyes','stewart',
+  'morris','morales','murphy','cook','rogers','gutierrez','ortiz','morgan','cooper','peterson',
+  'bailey','reed','kelly','howard','ramos','kim','cox','ward','richardson','watson','brooks',
+  'chavez','wood','james','bennett','gray','mendoza','ruiz','hughes','price','alvarez','castillo',
+  'sanders','patel','myers','long','ross','foster','jimenez','powell','jenkins','perry','russell',
+  'sullivan','bell','coleman','butler','henderson','barnes','gonzales','fisher','vasquez','simmons',
+  'griffin','mcdonald','hayes','murray','ford','graham','duncan','cole','west','jordan','owens',
+  'reynolds','lawson','obrien','lynch',
+  // South Asian (Indian, Pakistani, Bangladeshi, Sri Lankan)
+  'kumar','gupta','sharma','singh','verma','joshi','shah','khan','ali','ahmed','hassan',
+  'hussein','patel','reddy','nair','menon','pillai','iyer','rao','das','bose','sen',
+  'chatterjee','mukherjee','banerjee','bhatt','desai','mehta','trivedi','pandey','mishra','tiwari',
+  'saxena','agarwal','mahajan','kapoor','chopra','malhotra','sinha','thakur','chauhan','yadav',
+  'rajput','rathore','kulkarni','patil','deshpande','jog','deshpande','kadam','shinde','pawar',
+  'naidu','chowdhury','bhat','hegde','shetty','kamath','pai','gowda','sethi','grover',
+  'bajaj','ahuja','bhatia','dhawan','kohli','anand','khanna','arora','luthra','oberoi',
+  'chaudhary','shukla','dubey','dixit','srivastava','awasthi','rastogi','nigam','mathur','tandon',
+  'husain','ansari','siddiqui','rizvi','mirza','qureshi','hashmi','jafri','bukhari','farooqui',
+  // East Asian
+  'wang','chen','li','zhang','liu','yang','huang','zhao','wu','zhou','xu','sun','ma',
+  'zhu','hu','guo','lin','he','gao','luo','zheng','liang','xie','tang','deng','feng',
+  'kim','park','choi','cho','yoon','kang','jung','lim','han','song','shin','kwon','hwang',
+  'nguyen','tran','le','pham','hoang','vo','dang','bui','do','ngo','duong','ly',
+  'tanaka','suzuki','sato','takahashi','watanabe','ito','yamamoto','nakamura','kobayashi',
+  'yoshida','yamada','sasaki','yamaguchi','matsumoto','inoue','kimura','hayashi','shimizu',
+  // Arabic / Middle Eastern
+  'al-rashid','al-hussein','al-farsi','al-sayed','mohammed','abdullah','rahman','hassan',
+  'ibrahim','ismail','osman','yusuf','hamid','nasser','khoury','haddad','mansour','saleh',
+  // African
+  'diallo','traore','coulibaly','toure','camara','keita','kone','bah','sow','barry',
+  'ndiaye','fall','diop','diouf','mbaye','sylla','okafor','obi','eze','nwosu','adeyemi',
+  'ogunleye','bakare','balogun','afolabi',
+  // Russian / Eastern European
+  'ivanov','petrov','smirnov','kuznetsov','popov','sokolov','lebedev','kozlov','novikov',
+  'morozov','volkov','alekseev','fedorov','kowalski','nowak','wisniewski','wojciechowski',
+  // French / German / European
+  'dubois','moreau','laurent','simon','michel','lefevre','roux','fournier','girard',
+  'muller','schmidt','schneider','fischer','weber','meyer','wagner','becker','hoffmann',
+  'wong','chan','lam','tan','ng',
+]);
+
+// Surnames strongly associated with "family name first" cultures
+// These are common surnames that, when appearing as the FIRST word, suggest
+// the name may be in Last-First order (East Asian, Hungarian, etc.)
+const FAMILY_FIRST_SURNAMES = new Set([
+  // Chinese (top ~40 surnames cover >90% of population)
+  'wang','li','zhang','liu','chen','yang','huang','zhao','wu','zhou',
+  'xu','sun','ma','zhu','hu','guo','lin','he','gao','luo',
+  'zheng','liang','xie','tang','deng','feng','han','cao','peng','zeng',
+  'xiao','tian','dong','pan','yuan','yu','jiang','cai','jia','ding',
+  // Korean
+  'kim','park','lee','choi','jung','kang','cho','yoon','jang','lim',
+  'han','shin','kwon','hwang','song','ahn','yoo','seo','moon','bae',
+  // Vietnamese
+  'nguyen','tran','le','pham','hoang','vo','dang','bui','do','ngo',
+  'duong','ly','ha','doan','vuong','mai','huynh','dinh','dam',
+  // Japanese
+  'tanaka','suzuki','sato','takahashi','watanabe','ito','yamamoto','nakamura',
+  'kobayashi','yoshida','yamada','sasaki','yamaguchi','matsumoto','inoue',
+  'kimura','hayashi','shimizu','saito','kato','ikeda','mori','hashimoto',
+  // Hungarian (family-name-first culture)
+  'nagy','kovacs','toth','szabo','horvath','varga','kiss','molnar','nemeth','farkas',
+]);
+
+
+// ========== DETECTION ENGINE ==========
+
+function analyze() {
+  const raw = document.getElementById('nameInput').value;
+  if (!raw.trim()) return;
+  // Preserve original whitespace for detection but split on newlines
+  const lines = raw.split('\n').filter(l => l.trim().length > 0);
+  entries = lines.map((name, i) => {
+    const issues = detectIssues(name);
+    return {
+      id: i,
+      original: name,
+      current: name.trim(), // trim for display but detect on original
+      issues: issues,
+      details: issues.map(iss => issueDetail(iss, name)),
+      suggestion: suggestFix(name),
+      accepted: false,
+      dismissed: false,
+    };
+  });
+  markDuplicates();
+  render();
+  document.getElementById('resultsSection').style.display = '';
+}
+
+function issueDetail(issueType, name) {
+  switch(issueType) {
+    case 'spacing':
+      if (name !== name.trim()) return 'Leading/trailing whitespace';
+      if (/  +/.test(name)) return 'Extra spaces between words';
+      if (/\t/.test(name)) return 'Contains tab characters';
+      return 'Spacing issue';
+    case 'caps':
+      const parts = name.trim().split(/\s+/);
+      if (parts.every(p => p === p.toUpperCase() && /[A-Z]/.test(p))) return 'ALL CAPS';
+      if (parts.every(p => p === p.toLowerCase())) return 'all lowercase';
+      if (parts.some(p => p.length > 1 && p[0] === p[0].toLowerCase() && /[A-Z]/.test(p.slice(1)))) return 'Inverted case';
+      return 'Mixed capitalization';
+    case 'data':
+      if (/\d/.test(name)) return 'Contains numbers';
+      if (PLACEHOLDERS.has(name.trim().toLowerCase())) return 'Placeholder entry';
+      if (/\xC3[\x80-\xBF]/.test(name)) return 'Possible encoding issue (mojibake)';
+      if (/[<>@#$%^&*=+{}[\]|\\~`]/.test(name)) return 'Contains special characters';
+      return 'Data entry error';
+    case 'initial':
+      return 'Single-letter initial(s) — may be truncated';
+    case 'spelling':
+      return 'Unusual letter pattern — verify spelling';
+    case 'reversed':
+      if (/,/.test(name)) return '"Last, First" format detected';
+      const rTokens = name.trim().split(/\s+/).filter(t => !SINGLE_PARTICLES.has(t.toLowerCase()));
+      if (rTokens.length >= 1 && FAMILY_FIRST_SURNAMES.has(rTokens[0].toLowerCase())) {
+        return 'Possible family-name-first order (East Asian/Hungarian convention)';
+      }
+      return 'Name parts may be reversed';
+    case 'format':
+      if (/\(.*\)/.test(name)) return 'Contains parenthetical (nickname?)';
+      const tparts = name.trim().split(/\s+/);
+      if (tparts.some(p => p === p.toUpperCase() && p.length > 1 && /[A-Z]/.test(p)) &&
+          tparts.some(p => p !== p.toUpperCase() && p.length > 1)) return 'Mixed: some parts ALL CAPS';
+      return 'Unusual formatting';
+    default: return '';
+  }
+}
+
+function detectIssues(name) {
+  const issues = [];
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Placeholder detection
+  if (PLACEHOLDERS.has(lower)) { issues.push('data'); return issues; }
+
+  // Data errors
+  if (/\d/.test(trimmed)) issues.push('data');
+  if (/[<>@#$%^&*=+{}[\]|\\~`]/.test(trimmed)) issues.push('data');
+  if (/\xC3[\x80-\xBF]/.test(trimmed)) issues.push('data'); // mojibake
+
+  // Spacing issues
+  if (name !== name.trim()) issues.push('spacing'); // leading/trailing
+  if (/  +/.test(trimmed)) issues.push('spacing');
+  if (/\t/.test(name)) issues.push('spacing');
+  if ((trimmed.match(/,/g) || []).length > 1) issues.push('spacing');
+  if (/[,.]$/.test(trimmed)) issues.push('spacing');
+
+  // Extract alpha parts for analysis
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  const alphaParts = tokens.map(t => t.replace(/[^a-zA-Z\u00C0-\u024F'-]/g, '')).filter(Boolean);
+
+  // Capitalization checks (skip particles and single chars)
+  const significantParts = alphaParts.filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
+  if (significantParts.length > 0) {
+    const allLower = significantParts.every(p => p === p.toLowerCase());
+    const allUpper = significantParts.every(p => p === p.toUpperCase());
+    const invertedCase = significantParts.some(p =>
+      p.length > 1 && p[0] === p[0].toLowerCase() && p[0] !== p[0].toUpperCase() &&
+      p.slice(1).split('').some(c => c === c.toUpperCase() && c !== c.toLowerCase())
+    );
+    if (allLower) issues.push('caps');
+    if (allUpper && significantParts.length > 0) issues.push('caps');
+    if (invertedCase && !allUpper && !allLower) issues.push('caps');
+  }
+
+  // Single initial detection (but not if it's a known particle)
+  const hasLoneInitial = tokens.some(t => {
+    const clean = t.replace(/[^a-zA-Z]/g, '');
+    return clean.length === 1 && !SINGLE_PARTICLES.has(clean.toLowerCase());
+  });
+  if (hasLoneInitial) issues.push('initial');
+
+  // Unusual format: parenthetical nicknames
+  if (/\(.*\)/.test(trimmed)) issues.push('format');
+
+  // Mixed ALL-CAPS parts with normal parts (separator style)
+  if (!issues.includes('caps') && significantParts.length >= 2) {
+    const hasUpper = significantParts.some(p => p === p.toUpperCase() && p.length > 1 && /[A-Z]/.test(p));
+    const hasNormal = significantParts.some(p => p !== p.toUpperCase() && p.length > 1);
+    if (hasUpper && hasNormal) issues.push('format');
+  }
+
+  // Reversed name: "Last, First" format
+  if (/^[A-Za-z\u00C0-\u024F'-]+\s*,\s*[A-Za-z\u00C0-\u024F'-]/.test(trimmed)) {
+    issues.push('reversed');
+  }
+
+  // Reversed name: heuristic using name frequency
+  if (!issues.includes('reversed') && alphaParts.length >= 2) {
+    // Filter out particles for analysis
+    const nonParticle = alphaParts.filter(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
+    if (nonParticle.length >= 2) {
+      const first = nonParticle[0].toLowerCase();
+      const last = nonParticle[nonParticle.length - 1].toLowerCase();
+
+      // Classic 2-part reversal: "Smith John" where Smith is a known surname, John is a known given name
+      if (COMMON_LAST.has(first) && COMMON_FIRST.has(last) && !COMMON_FIRST.has(first)) {
+        issues.push('reversed');
+      }
+
+      // East Asian / Hungarian style: first token is a known family-name-first surname
+      // and the remaining parts look like given names (not also surnames)
+      if (!issues.includes('reversed') && FAMILY_FIRST_SURNAMES.has(first)) {
+        const restAreSurnames = nonParticle.slice(1).every(p => FAMILY_FIRST_SURNAMES.has(p.toLowerCase()));
+        if (!restAreSurnames) {
+          issues.push('reversed');
+        }
+      }
+    }
+  }
+
+  // Possible typo: excessive consecutive consonants (language-aware)
+  const vowels = 'aeiouyàáâãäåèéêëìíîïòóôõöùúûüýÿ';
+  for (const part of alphaParts) {
+    if (part.length < 4) continue;
+    const lo = part.toLowerCase();
+    // Check for 4+ consonants in a row
+    let maxConsonants = 0, run = 0;
+    for (const ch of lo) {
+      if (vowels.includes(ch) || ch === "'" || ch === '-') { run = 0; } else { run++; }
+      maxConsonants = Math.max(maxConsonants, run);
+    }
+    if (maxConsonants >= 5) {
+      // Check against known valid clusters
+      const hasValidCluster = VALID_CLUSTERS.some(cl => lo.includes(cl));
+      if (!hasValidCluster && !issues.includes('spelling')) issues.push('spelling');
+    }
+    // Triple repeated character
+    if (/(.)\1\1/.test(lo) && !issues.includes('spelling')) issues.push('spelling');
+  }
+
+  return [...new Set(issues)];
+}
+
+// Levenshtein distance for fuzzy matching
+function editDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function markDuplicates() {
+  // Normalize: lowercase, strip diacritics, collapse non-alpha
+  const normalize = s => s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z]/g, '');
+
+  // Also normalize with parts sorted (catches reversed names as dupes)
+  const normSorted = s => normalize(s).split('').sort().join('');
+
+  const norms = entries.map(e => normalize(e.current));
+  const active = entries.map((e, i) => !e.dismissed && norms[i].length > 0);
+
+  for (let i = 0; i < entries.length; i++) {
+    if (!active[i]) continue;
+    for (let j = i + 1; j < entries.length; j++) {
+      if (!active[j]) continue;
+
+      // Exact duplicate (after normalization)
+      if (norms[i] === norms[j]) {
+        if (!entries[i].issues.includes('duplicate')) {
+          entries[i].issues.push('duplicate');
+          entries[i].details.push('Same name as row ' + (j + 1));
+        }
+        if (!entries[j].issues.includes('duplicate')) {
+          entries[j].issues.push('duplicate');
+          entries[j].details.push('Same name as row ' + (i + 1));
+        }
+        continue;
+      }
+
+      // Near duplicate: edit distance <= 2 for names of reasonable length
+      // or same letters in different order (reversed parts)
+      if (norms[i].length >= 5 && norms[j].length >= 5) {
+        const dist = editDistance(norms[i], norms[j]);
+        const maxLen = Math.max(norms[i].length, norms[j].length);
+        // Allow 1-2 edits for short names, up to ~8% difference for longer names
+        const threshold = maxLen <= 10 ? 2 : Math.ceil(maxLen * 0.08);
+
+        if (dist > 0 && dist <= threshold) {
+          if (!entries[i].issues.includes('neardupe') && !entries[i].issues.includes('duplicate')) {
+            entries[i].issues.push('neardupe');
+            entries[i].details.push('Similar to row ' + (j + 1) + ' ("' + entries[j].current + '")');
+          }
+          if (!entries[j].issues.includes('neardupe') && !entries[j].issues.includes('duplicate')) {
+            entries[j].issues.push('neardupe');
+            entries[j].details.push('Similar to row ' + (i + 1) + ' ("' + entries[i].current + '")');
+          }
+        }
+      }
+    }
+  }
+}
+
+
+// ========== SUGGESTION ENGINE ==========
+
+function suggestFix(name) {
+  let fixed = name.trim();
+  if (!fixed) return '';
+
+  // Handle "Last, First" format -> "First Last"
+  const commaMatch = fixed.match(/^([A-Za-z\u00C0-\u024F'-]+)\s*,\s*(.+)$/);
+  if (commaMatch) {
+    fixed = commaMatch[2].trim() + ' ' + commaMatch[1].trim();
+  }
+
+  // Remove numbers
+  fixed = fixed.replace(/[0-9]/g, '');
+
+  // Remove clearly invalid characters but keep apostrophes, hyphens, periods, parens, accented
+  fixed = fixed.replace(/[<>@#$%^&*=+{}[\]|\\~`]/g, '');
+
+  // Normalize spacing
+  fixed = fixed.replace(/\s+/g, ' ').trim();
+
+  // Smart title case
+  fixed = smartTitleCase(fixed);
+
+  // Reversed name fix
+  const parts = fixed.split(' ');
+  const nonParticle = parts.filter(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
+  if (nonParticle.length >= 2 && !/,/.test(name)) {
+    const first = nonParticle[0].toLowerCase();
+    const last = nonParticle[nonParticle.length - 1].toLowerCase();
+
+    // Classic reversal: "Smith John" -> "John Smith"
+    if (COMMON_LAST.has(first) && COMMON_FIRST.has(last) && !COMMON_FIRST.has(first)) {
+      // Move first token to end
+      fixed = [...nonParticle.slice(1), nonParticle[0]].join(' ');
+    }
+    // East Asian family-name-first: "Kim Minho" -> "Minho Kim"
+    else if (FAMILY_FIRST_SURNAMES.has(first) && !nonParticle.slice(1).every(p => FAMILY_FIRST_SURNAMES.has(p.toLowerCase()))) {
+      fixed = [...nonParticle.slice(1), nonParticle[0]].join(' ');
+    }
+  }
+
+  return fixed === name.trim() ? '' : fixed;
+}
+
+function smartTitleCase(name) {
+  const tokens = name.split(' ');
+  return tokens.map((token, idx) => {
+    const lo = token.toLowerCase();
+
+    // Preserve parenthetical nicknames
+    if (token.startsWith('(') && token.endsWith(')')) {
+      const inner = token.slice(1, -1);
+      return '(' + titleWord(inner) + ')';
+    }
+
+    // Keep suffixes in proper form
+    if (SUFFIXES.has(lo)) {
+      if (['i','ii','iii','iv','v','vi','vii','viii'].includes(lo)) return token.toUpperCase();
+      return lo.charAt(0).toUpperCase() + lo.slice(1);
+    }
+
+    // Particles stay lowercase unless they start the name
+    if (SINGLE_PARTICLES.has(lo) && idx > 0) return lo;
+
+    // Handle "al-" prefix
+    if (lo.startsWith('al-') && token.length > 3) {
+      return 'Al-' + titleWord(token.slice(3));
+    }
+    if (lo.startsWith('el-') && token.length > 3) {
+      return 'El-' + titleWord(token.slice(3));
+    }
+
+    return titleWord(token);
+  }).join(' ');
+}
+
+function titleWord(s) {
+  if (s.length === 0) return s;
+
+  // Handle hyphenated names: Jean-Pierre, Adjei-Toure
+  if (s.includes('-')) {
+    return s.split('-').map(titleWord).join('-');
+  }
+
+  // Handle apostrophe names: O'Brien, N'Dour, D'Arcy, Sant'Anna
+  const apoIdx = s.indexOf("'");
+  if (apoIdx >= 0 && apoIdx < s.length - 1) {
+    const before = s.slice(0, apoIdx);
+    const after = s.slice(apoIdx + 1);
+    if (before.length <= 2) {
+      // O'Brien, N'Dour, D'Arcy style
+      return titleWord(before) + "'" + titleWord(after);
+    }
+    // Sant'Anna style
+    return titleWord(before) + "'" + titleWord(after);
+  }
+
+  const lo = s.toLowerCase();
+
+  // Mc prefix: McDonald, McBride
+  if (lo.startsWith('mc') && s.length > 2) {
+    return 'Mc' + s[2].toUpperCase() + s.slice(3).toLowerCase();
+  }
+
+  // Mac prefix: only if original had internal cap (MacArthur) to avoid overcorrecting (Macula)
+  if (lo.startsWith('mac') && s.length > 3) {
+    const orig3 = s[3];
+    if (orig3 && orig3 === orig3.toUpperCase() && orig3 !== orig3.toLowerCase()) {
+      return 'Mac' + s[3].toUpperCase() + s.slice(4).toLowerCase();
+    }
+  }
+
+  return s[0].toUpperCase() + s.slice(1).toLowerCase();
+}
+
+
+// ========== RENDERING ==========
+
+function render() {
+  const tbody = document.getElementById('resultsBody');
+  const filtered = entries.filter(e => {
+    if (e.dismissed) return false;
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'issues') return e.issues.length > 0;
+    if (activeFilter === 'clean') return e.issues.length === 0;
+    return e.issues.includes(activeFilter);
+  });
+
+  const total = entries.filter(e => !e.dismissed).length;
+  const withIssues = entries.filter(e => !e.dismissed && e.issues.length > 0).length;
+  const dismissedCount = entries.filter(e => e.dismissed).length;
+  document.getElementById('stats').innerHTML =
+    `<span><strong>${total}</strong> names</span>` +
+    `<span><strong>${withIssues}</strong> with issues</span>` +
+    `<span><strong>${total - withIssues}</strong> clean</span>`;
+
+  // Dismissed bar
+  const dismissedBar = document.getElementById('dismissedBar');
+  if (dismissedCount > 0) {
+    dismissedBar.style.display = '';
+    document.getElementById('dismissedCount').textContent = dismissedCount + ' dismissed name' + (dismissedCount > 1 ? 's' : '');
+  } else {
+    dismissedBar.style.display = 'none';
+  }
+
+  const issueCounts = {};
+  entries.filter(e => !e.dismissed).forEach(e => {
+    e.issues.forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
+  });
+
+  let filterHTML = `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All (${total})</button>`;
+  filterHTML += `<button class="filter-btn ${activeFilter==='issues'?'active':''}" onclick="setFilter('issues')">Has Issues (${withIssues})</button>`;
+  for (const [key, info] of Object.entries(ISSUE_TYPES)) {
+    if (issueCounts[key]) {
+      filterHTML += `<button class="filter-btn ${activeFilter===key?'active':''}" onclick="setFilter('${key}')">${info.label} (${issueCounts[key]})</button>`;
+    }
+  }
+  filterHTML += `<button class="filter-btn ${activeFilter==='clean'?'active':''}" onclick="setFilter('clean')">Clean (${total - withIssues})</button>`;
+  document.getElementById('filterBar').innerHTML = filterHTML;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No names match the current filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(e => {
+    const hasIssues = e.issues.length > 0;
+    const rowClass = hasIssues ? '' : 'row-clean';
+
+    const tags = e.issues.map((iss, idx) => {
+      const info = ISSUE_TYPES[iss];
+      if (!info) return '';
+      const detail = e.details[idx] || '';
+      return `<div><span class="tag ${info.cls}">${info.label}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
+    }).join('');
+
+    const suggestion = e.suggestion && !e.accepted
+      ? `<span style="color:var(--success)">${esc(e.suggestion)}</span>`
+      : (e.accepted ? `<span style="color:var(--text-muted);font-style:italic">Applied</span>` : `<span style="color:var(--text-muted)">\u2014</span>`);
+
+    const actions = [];
+    if (e.suggestion && !e.accepted) {
+      actions.push(`<button class="btn-primary" onclick="acceptSuggestion(${e.id})">Accept</button>`);
+    }
+    if (hasIssues) {
+      actions.push(`<button onclick="dismissEntry(${e.id})">Dismiss</button>`);
+    }
+
+    return `<tr class="${rowClass}">
+      <td>
+        <input class="name-input" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
+        ${e.current !== e.original.trim() ? `<div class="original-name">was: ${esc(e.original.trim())}</div>` : ''}
+      </td>
+      <td><div class="tags">${tags || '<span style="color:var(--success)">Clean</span>'}</div></td>
+      <td>${suggestion}</td>
+      <td><div class="action-btns">${actions.join('')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function setFilter(f) { activeFilter = f; render(); }
+
+function updateName(id, value) {
+  entries[id].current = value;
+  entries[id].issues = detectIssues(value);
+  entries[id].details = entries[id].issues.map(iss => issueDetail(iss, value));
+  entries[id].suggestion = suggestFix(value);
+  stripDupeIssues(); markDuplicates(); render();
+}
+
+function acceptSuggestion(id) {
+  entries[id].current = entries[id].suggestion;
+  entries[id].accepted = true;
+  entries[id].issues = detectIssues(entries[id].current);
+  entries[id].details = entries[id].issues.map(iss => issueDetail(iss, entries[id].current));
+  entries[id].suggestion = suggestFix(entries[id].current);
+  stripDupeIssues();
+  markDuplicates();
+  render();
+}
+
+function dismissEntry(id) { entries[id].dismissed = true; render(); }
+
+function undoAllDismissed() {
+  entries.forEach(e => { e.dismissed = false; });
+  stripDupeIssues();
+  markDuplicates();
+  render();
+}
+
+function acceptAllSuggestions() {
+  entries.forEach(e => {
+    if (e.suggestion && !e.accepted && !e.dismissed) {
+      e.current = e.suggestion;
+      e.accepted = true;
+      e.issues = detectIssues(e.current);
+      e.details = e.issues.map(iss => issueDetail(iss, e.current));
+      e.suggestion = suggestFix(e.current);
+    }
+  });
+  stripDupeIssues();
+  markDuplicates();
+  render();
+}
+
+// Helper: strip duplicate/neardupe issues and their corresponding details
+function stripDupeIssues() {
+  entries.forEach(e => {
+    const keep = [];
+    const keepDetails = [];
+    for (let i = 0; i < e.issues.length; i++) {
+      if (e.issues[i] !== 'duplicate' && e.issues[i] !== 'neardupe') {
+        keep.push(e.issues[i]);
+        keepDetails.push(e.details[i]);
+      }
+    }
+    e.issues = keep;
+    e.details = keepDetails;
+  });
+}
+
+
+// ========== EXPORT ==========
+
+function exportTxt() {
+  const names = entries.filter(e => !e.dismissed).map(e => e.current)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const rows = Math.ceil(names.length / 3);
+  const col1 = names.slice(0, rows);
+  const col2 = names.slice(rows, rows * 2);
+  const col3 = names.slice(rows * 2);
+  const w1 = Math.max(...col1.map(n => n.length), 0);
+  const w2 = Math.max(...(col2.length ? col2.map(n => n.length) : [0]), 0);
+  const lines = [];
+  for (let i = 0; i < rows; i++) {
+    const c1 = (col1[i] || '').padEnd(w1 + 4);
+    const c2 = (col2[i] || '').padEnd(w2 + 4);
+    const c3 = col3[i] || '';
+    lines.push((c1 + c2 + c3).trimEnd());
+  }
+  download(lines.join('\n'), 'cleaned-names.txt', 'text/plain');
+}
+
+function exportCSV() {
+  const header = 'Name,Original,Issues,Status';
+  const rows = entries.filter(e => !e.dismissed).map(e => {
+    const issues = e.issues.map(i => ISSUE_TYPES[i]?.label || i).join('; ');
+    const status = e.accepted ? 'Fixed' : (e.issues.length === 0 ? 'Clean' : 'Unfixed');
+    return `"${e.current.replace(/"/g,'""')}","${e.original.trim().replace(/"/g,'""')}","${issues}","${status}"`;
+  });
+  download(header + '\n' + rows.join('\n'), 'namealizer-report.csv', 'text/csv');
+}
+
+function copyToClipboard() {
+  const names = entries.filter(e => !e.dismissed).map(e => e.current).join('\n');
+  navigator.clipboard.writeText(names).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+function download(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ========== SAMPLE DATA ==========
+
+function loadSample() {
+  document.getElementById('nameInput').value = `John Smith
+Emily Chen
+Sarah O'Connor
+Smith John
+Johnson Michael
+JANE DOE
+jane doe
+jOHN sMITH
+Jane   Doe
+Jane	Doe
+O'Brien, Mary
+Williams, James
+robert42 jones
+J@ne D0e
+Maria  Elena   Santos
+GARCIA Maria
+maria garcia
+Maria Garcia
+Santiago de la Cruz
+Jean-Pierre Dubois
+McDonald Sarah
+ David   Lee
+thompson robert
+Anna-Lise van der Berg
+Reginald P Worthington III
+N Ramirez
+A Kim
+test
+NULL
+Kim Minho
+Nguyen Thi Lan
+Tanaka Haruto
+Park Jisoo
+Wang Xiaoming
+Patel Arjun
+Suzuki Yuki
+Nagy Istvan
+Sharma Priya
+Tran Duc Minh
+Micheal Johnson
+Michael Johnson
+Roberto Sanchez
+Roberta Sanchez`;
+}
+
+function clearAll() {
+  document.getElementById('nameInput').value = '';
+  entries = [];
+  document.getElementById('resultsSection').style.display = 'none';
+}
+</script>
+</body>
+</html>
