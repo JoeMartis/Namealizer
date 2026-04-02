@@ -928,9 +928,27 @@ function stripDupeIssues() {
 
 // ========== EXPORT ==========
 
-function exportTxt() {
-  const names = entries.filter(e => !e.dismissed).map(e => e.current)
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+// Extract surname for sorting: last significant word (skip suffixes like Jr, II, III)
+function getSurname(name) {
+  const parts = name.trim().split(/\s+/);
+  // Walk backwards to find the last non-suffix, non-particle word
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const lo = parts[i].toLowerCase().replace(/\./g, '');
+    if (!SUFFIXES.has(lo)) return parts[i];
+  }
+  return parts[parts.length - 1] || name;
+}
+
+function sortBySurname(names) {
+  return [...names].sort((a, b) => {
+    const sa = getSurname(a).toLowerCase();
+    const sb = getSurname(b).toLowerCase();
+    if (sa !== sb) return sa.localeCompare(sb, undefined, { sensitivity: 'base' });
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+}
+
+function threeColumnLayout(names) {
   const rows = Math.ceil(names.length / 3);
   const col1 = names.slice(0, rows);
   const col2 = names.slice(rows, rows * 2);
@@ -944,17 +962,31 @@ function exportTxt() {
     const c3 = col3[i] || '';
     lines.push((c1 + c2 + c3).trimEnd());
   }
-  download(lines.join('\n'), 'cleaned-names.txt', 'text/plain');
+  return lines;
+}
+
+function exportTxt() {
+  const names = sortBySurname(entries.filter(e => !e.dismissed).map(e => e.current));
+  download(threeColumnLayout(names).join('\n'), 'cleaned-names.txt', 'text/plain');
 }
 
 function exportCSV() {
-  const header = 'Name,Original,Issues,Status';
-  const rows = entries.filter(e => !e.dismissed).map(e => {
-    const issues = e.issues.map(i => ISSUE_TYPES[i]?.label || i).join('; ');
-    const status = e.accepted ? 'Fixed' : (e.issues.length === 0 ? 'Clean' : 'Unfixed');
-    return `"${e.current.replace(/"/g,'""')}","${e.original.trim().replace(/"/g,'""')}","${issues}","${status}"`;
-  });
-  download(header + '\n' + rows.join('\n'), 'namealizer-report.csv', 'text/csv');
+  const names = sortBySurname(entries.filter(e => !e.dismissed).map(e => e.current));
+  const lines = threeColumnLayout(names);
+  // Build CSV with three columns
+  const header = 'Column 1,Column 2,Column 3';
+  const rows = Math.ceil(names.length / 3);
+  const col1 = names.slice(0, rows);
+  const col2 = names.slice(rows, rows * 2);
+  const col3 = names.slice(rows * 2);
+  const csvRows = [];
+  for (let i = 0; i < rows; i++) {
+    const c1 = col1[i] || '';
+    const c2 = col2[i] || '';
+    const c3 = col3[i] || '';
+    csvRows.push(`"${c1.replace(/"/g,'""')}","${c2.replace(/"/g,'""')}","${c3.replace(/"/g,'""')}"`);
+  }
+  download(header + '\n' + csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
 }
 
 function copyToClipboard(btn) {
