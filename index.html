@@ -21,7 +21,7 @@
     --tag-spelling: #fdf2f8; --tag-spelling-text: #831843;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
-  .container { max-width: 1060px; margin: 0 auto; padding: 2rem 1rem; }
+  .container { max-width: 1140px; margin: 0 auto; padding: 2rem 1rem; }
   h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
   .subtitle { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
@@ -64,8 +64,13 @@
   .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
   .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
-  .confidence { font-size: 0.65rem; font-weight: 600; margin-left: 0.3rem; opacity: 0.8; }
-  @media (max-width: 640px) {
+  .conf-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .conf-high { background: #fee2e2; color: #991b1b; }
+  .conf-medium { background: #fef3c7; color: #92400e; }
+  .conf-low { background: #f3f4f6; color: #6b7280; }
+  .conf-cell { text-align: center; }
+  @media (max-width: 768px) {
+    .results-table th:nth-child(4), .results-table td:nth-child(4) { display: none; }
     .results-table th:nth-child(3), .results-table td:nth-child(3) { display: none; }
   }
 </style>
@@ -90,13 +95,20 @@
         <div class="stats" id="stats"></div>
       </div>
       <div class="filter-bar" id="filterBar"></div>
+      <div style="margin-bottom:0.75rem;">
+        <label style="font-size:0.82rem; color:var(--text-muted); cursor:pointer; user-select:none;">
+          <input type="checkbox" id="ignoreSpacing" onchange="toggleIgnoreSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
+          Ignore whitespace/tab issues
+        </label>
+      </div>
       <div style="overflow-x:auto;">
         <table class="results-table">
           <thead><tr>
-            <th style="width:28%">Name</th>
-            <th style="width:30%">Issues</th>
+            <th style="width:24%">Name</th>
+            <th style="width:26%">Issues</th>
+            <th style="width:7%">Conf.</th>
             <th style="width:22%">Suggested Fix</th>
-            <th style="width:20%">Actions</th>
+            <th style="width:21%">Actions</th>
           </tr></thead>
           <tbody id="resultsBody"></tbody>
         </table>
@@ -117,6 +129,7 @@
 <script>
 let entries = [];
 let activeFilter = 'all';
+let ignoreSpacing = false;
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -721,18 +734,25 @@ function titleWord(s) {
 
 // ========== RENDERING ==========
 
+// Get visible issues for an entry (respects ignoreSpacing toggle)
+function visibleIssues(e) {
+  if (!ignoreSpacing) return e.issues;
+  return e.issues.filter(i => i !== 'spacing');
+}
+
 function render() {
   const tbody = document.getElementById('resultsBody');
   const filtered = entries.filter(e => {
     if (e.dismissed) return false;
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'issues') return e.issues.length > 0;
-    if (activeFilter === 'clean') return e.issues.length === 0;
+    if (activeFilter === 'issues') return visibleIssues(e).length > 0;
+    if (activeFilter === 'clean') return visibleIssues(e).length === 0;
+    if (activeFilter === 'spacing' && ignoreSpacing) return false;
     return e.issues.includes(activeFilter);
   });
 
   const total = entries.filter(e => !e.dismissed).length;
-  const withIssues = entries.filter(e => !e.dismissed && e.issues.length > 0).length;
+  const withIssues = entries.filter(e => !e.dismissed && visibleIssues(e).length > 0).length;
   const dismissedCount = entries.filter(e => e.dismissed).length;
   document.getElementById('stats').innerHTML =
     `<span><strong>${total}</strong> names</span>` +
@@ -750,7 +770,7 @@ function render() {
 
   const issueCounts = {};
   entries.filter(e => !e.dismissed).forEach(e => {
-    e.issues.forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
+    visibleIssues(e).forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
   });
 
   let filterHTML = `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All (${total})</button>`;
@@ -764,22 +784,37 @@ function render() {
   document.getElementById('filterBar').innerHTML = filterHTML;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No names match the current filter.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No names match the current filter.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(e => {
-    const hasIssues = e.issues.length > 0;
+    const vis = visibleIssues(e);
+    const hasIssues = vis.length > 0;
     const rowClass = hasIssues ? '' : 'row-clean';
 
     const tags = e.issues.map((iss, idx) => {
+      if (ignoreSpacing && iss === 'spacing') return '';
       const info = ISSUE_TYPES[iss];
       if (!info) return '';
       const detail = e.details[idx] || '';
-      const conf = getConfidence(iss, detail);
-      const confInfo = CONFIDENCE_LABELS[conf];
-      return `<div><span class="tag ${info.cls}">${info.label}</span><span class="confidence" style="color:${confInfo.color}">${confInfo.text}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
-    }).join('');
+      return `<div><span class="tag ${info.cls}">${info.label}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
+    }).filter(Boolean).join('');
+
+    // Compute highest confidence across visible issues for this row
+    const CONF_RANK = { high: 3, medium: 2, low: 1 };
+    let topConf = '';
+    if (hasIssues) {
+      let maxRank = 0;
+      e.issues.forEach((iss, idx) => {
+        if (ignoreSpacing && iss === 'spacing') return;
+        const c = getConfidence(iss, e.details[idx] || '');
+        if (CONF_RANK[c] > maxRank) { maxRank = CONF_RANK[c]; topConf = c; }
+      });
+    }
+    const confCell = topConf
+      ? `<span class="conf-badge conf-${topConf}">${topConf}</span>`
+      : '';
 
     const suggestion = e.suggestion && !e.accepted
       ? `<span style="color:var(--success)">${esc(e.suggestion)}</span>`
@@ -799,6 +834,7 @@ function render() {
         ${e.current !== normalizeDisplay(e.original) ? `<div class="original-name">was: ${esc(normalizeDisplay(e.original))}</div>` : ''}
       </td>
       <td><div class="tags">${tags || '<span style="color:var(--success)">Clean</span>'}</div></td>
+      <td class="conf-cell">${confCell}</td>
       <td>${suggestion}</td>
       <td><div class="action-btns">${actions.join('')}</div></td>
     </tr>`;
@@ -824,6 +860,11 @@ function esc(s) {
 }
 
 function setFilter(f) { activeFilter = f; render(); }
+
+function toggleIgnoreSpacing() {
+  ignoreSpacing = document.getElementById('ignoreSpacing').checked;
+  render();
+}
 
 function updateName(id, value) {
   entries[id].current = value;
