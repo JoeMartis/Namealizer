@@ -64,6 +64,7 @@
   .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
   .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+  .confidence { font-size: 0.65rem; font-weight: 600; margin-left: 0.3rem; opacity: 0.8; }
   @media (max-width: 640px) {
     .results-table th:nth-child(3), .results-table td:nth-child(3) { display: none; }
   }
@@ -107,7 +108,7 @@
     </div>
     <div class="btn-row" style="justify-content:flex-end;">
       <button onclick="acceptAllSuggestions()">Accept All Suggestions</button>
-      <button onclick="copyToClipboard()">Copy to Clipboard</button>
+      <button onclick="copyToClipboard(this)">Copy to Clipboard</button>
       <button class="btn-success" onclick="exportCSV()">Export CSV</button>
       <button class="btn-success" onclick="exportTxt()">Export Text</button>
     </div>
@@ -118,26 +119,52 @@ let entries = [];
 let activeFilter = 'all';
 
 const ISSUE_TYPES = {
-  reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed' },
-  caps:      { label: 'Capitalization', cls: 'tag-caps' },
-  spacing:   { label: 'Spacing/Punctuation', cls: 'tag-spacing' },
-  data:      { label: 'Data Error', cls: 'tag-data' },
-  format:    { label: 'Unusual Format', cls: 'tag-format' },
-  duplicate: { label: 'Duplicate', cls: 'tag-duplicate' },
-  neardupe:  { label: 'Near Duplicate', cls: 'tag-duplicate' },
-  initial:   { label: 'Single Initial', cls: 'tag-initial' },
-  spelling:  { label: 'Possible Typo', cls: 'tag-spelling' },
+  reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
+  caps:      { label: 'Capitalization', cls: 'tag-caps', confidence: 'high' },
+  spacing:   { label: 'Spacing/Punctuation', cls: 'tag-spacing', confidence: 'high' },
+  data:      { label: 'Data Error', cls: 'tag-data', confidence: 'high' },
+  format:    { label: 'Unusual Format', cls: 'tag-format', confidence: 'low' },
+  duplicate: { label: 'Duplicate', cls: 'tag-duplicate', confidence: 'high' },
+  neardupe:  { label: 'Near Duplicate', cls: 'tag-duplicate', confidence: 'medium' },
+  initial:   { label: 'Single Initial', cls: 'tag-initial', confidence: 'low' },
+  spelling:  { label: 'Possible Typo', cls: 'tag-spelling', confidence: 'low' },
 };
 
-// Particles that are normally lowercase mid-name
-const PARTICLES = new Set([
-  'de','del','de la','de los','de las','da','do','dos','das',
-  'du','le','la','des','di','dal','della','dei','degli','delle','lo',
-  'van','van de','van den','van der','het','ter','ten',
-  'von','von der','zu','zum','zur',
-  'al','el','bin','ibn','bint','abu','al-','el-',
-  'ap','ab','y','e','i','und','of',
-]);
+// Per-issue confidence can be overridden by detection logic
+// high = almost certainly an error, medium = likely, low = review recommended
+function getConfidence(issueType, detail) {
+  // Override defaults based on specifics
+  if (issueType === 'data') {
+    if (detail && detail.includes('Placeholder')) return 'high';
+    if (detail && detail.includes('Repeated name part')) return 'medium';
+    if (detail && detail.includes('numbers')) return 'high';
+    return 'high';
+  }
+  if (issueType === 'caps') {
+    if (detail && detail.includes('ALL CAPS')) return 'high';
+    if (detail && detail.includes('all lowercase')) return 'high';
+    if (detail && detail.includes('Inverted')) return 'high';
+    if (detail && detail.includes('Uncapitalized')) return 'medium';
+    return 'medium';
+  }
+  if (issueType === 'reversed') {
+    if (detail && detail.includes('Last, First')) return 'high';
+    if (detail && detail.includes('family-name-first')) return 'low';
+    return 'medium';
+  }
+  if (issueType === 'spacing') {
+    if (detail && detail.includes('tab')) return 'high';
+    if (detail && detail.includes('quotes')) return 'high';
+    return 'high';
+  }
+  return ISSUE_TYPES[issueType]?.confidence || 'low';
+}
+
+const CONFIDENCE_LABELS = {
+  high:   { text: 'High', color: '#dc2626' },
+  medium: { text: 'Med', color: '#f59e0b' },
+  low:    { text: 'Low', color: '#6b7280' },
+};
 
 // Single-word particles for quick lookup
 const SINGLE_PARTICLES = new Set([
@@ -152,9 +179,6 @@ const SUFFIXES = new Set(['jr','jr.','sr','sr.','i','ii','iii','iv','v','vi','vi
 
 // Placeholder/junk entries
 const PLACEHOLDERS = new Set(['n/a','na','none','test','null','unknown','xxx','asdf','tbd','pending','temp','dummy','sample','example']);
-
-// Valid short names (don't flag as errors)
-const VALID_SHORT = new Set(['ng','wu','hu','xu','yi','li','he','ye','ai','ed','al','jo','bo','le','na','ha','do','an','yu','lu','ma','ji','qi']);
 
 // Known valid consonant clusters (don't flag as typos)
 const VALID_CLUSTERS = ['sch','str','tch','chr','phr','thr','shr','schr','ght','ngs','ths','rth','nth','lph','mph','nch','ndz','mts','dz','tsk','vsk','szc','prz','trz'];
@@ -320,26 +344,29 @@ function analyze() {
 }
 
 function issueDetail(issueType, name) {
+  // Clean version for analysis (strip quotes, tabs)
+  const clean = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').trim();
   switch(issueType) {
     case 'spacing':
       if (/\t/.test(name)) return 'Contains tab characters';
       if (/^".*"$/.test(name.trim())) return 'Wrapped in quotes (CSV artifact)';
       if (name !== name.trim()) return 'Leading/trailing whitespace';
-      if (/  +/.test(name)) return 'Extra spaces between words';
+      if (/  +/.test(clean)) return 'Extra spaces between words';
       return 'Spacing issue';
     case 'caps':
-      const cParts = name.trim().split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
+      const cParts = clean.split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
+      if (cParts.length === 0) return 'Mixed capitalization';
       if (cParts.every(p => p === p.toUpperCase() && /[A-Z]/.test(p))) return 'ALL CAPS';
       if (cParts.every(p => p === p.toLowerCase())) return 'all lowercase';
       if (cParts.some(p => p.length > 1 && p[0] === p[0].toLowerCase() && /[A-Z]/.test(p.slice(1)))) return 'Inverted case';
       if (cParts.some(p => p.length > 1 && p[0] === p[0].toLowerCase())) return 'Uncapitalized name part';
       return 'Mixed capitalization';
     case 'data':
-      if (/\d/.test(name)) return 'Contains numbers';
-      if (PLACEHOLDERS.has(name.trim().toLowerCase())) return 'Placeholder entry';
-      if (/\xC3[\x80-\xBF]/.test(name)) return 'Possible encoding issue (mojibake)';
-      if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(name)) return 'Contains special characters';
-      const dParts = name.trim().split(/\s+/).map(p => p.replace(/[^a-zA-Z\u00C0-\u024F'-]/g, '').toLowerCase()).filter(p => p.length > 1);
+      if (/\d/.test(clean)) return 'Contains numbers';
+      if (PLACEHOLDERS.has(clean.toLowerCase())) return 'Placeholder entry';
+      if (/\xC3[\x80-\xBF]/.test(clean)) return 'Possible encoding issue (mojibake)';
+      if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(clean)) return 'Contains special characters';
+      const dParts = clean.split(/\s+/).map(p => p.replace(/[^a-zA-Z\u00C0-\u024F'-]/g, '').toLowerCase()).filter(p => p.length > 1);
       const dSeen = new Set();
       for (const p of dParts) { if (dSeen.has(p)) return 'Repeated name part: "' + p + '"'; dSeen.add(p); }
       return 'Data entry error';
@@ -514,9 +541,6 @@ function markDuplicates() {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z]/g, '');
 
-  // Also normalize with parts sorted (catches reversed names as dupes)
-  const normSorted = s => normalize(s).split('').sort().join('');
-
   const norms = entries.map(e => normalize(e.current));
   const active = entries.map((e, i) => !e.dismissed && norms[i].length > 0);
 
@@ -607,7 +631,9 @@ function suggestFix(name) {
     }
   }
 
-  return fixed === name.trim() ? '' : fixed;
+  // Compare against normalized original to avoid suggesting no-op changes
+  const normalized = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').replace(/\s+/g, ' ').trim();
+  return fixed === normalized ? '' : fixed;
 }
 
 function smartTitleCase(name) {
@@ -750,7 +776,9 @@ function render() {
       const info = ISSUE_TYPES[iss];
       if (!info) return '';
       const detail = e.details[idx] || '';
-      return `<div><span class="tag ${info.cls}">${info.label}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
+      const conf = getConfidence(iss, detail);
+      const confInfo = CONFIDENCE_LABELS[conf];
+      return `<div><span class="tag ${info.cls}">${info.label}</span><span class="confidence" style="color:${confInfo.color}">${confInfo.text}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
     }).join('');
 
     const suggestion = e.suggestion && !e.accepted
@@ -768,7 +796,7 @@ function render() {
     return `<tr class="${rowClass}">
       <td>
         <input class="name-input" data-id="${e.id}" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
-        ${e.current !== e.original.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim() ? `<div class="original-name">was: ${esc(e.original.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim())}</div>` : ''}
+        ${e.current !== normalizeDisplay(e.original) ? `<div class="original-name">was: ${esc(normalizeDisplay(e.original))}</div>` : ''}
       </td>
       <td><div class="tags">${tags || '<span style="color:var(--success)">Clean</span>'}</div></td>
       <td>${suggestion}</td>
@@ -783,6 +811,10 @@ function render() {
       if (entries[id]) input.value = entries[id].current;
     });
   });
+}
+
+function normalizeDisplay(s) {
+  return s.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function esc(s) {
@@ -884,10 +916,9 @@ function exportCSV() {
   download(header + '\n' + rows.join('\n'), 'namealizer-report.csv', 'text/csv');
 }
 
-function copyToClipboard() {
+function copyToClipboard(btn) {
   const names = entries.filter(e => !e.dismissed).map(e => e.current).join('\n');
   navigator.clipboard.writeText(names).then(() => {
-    const btn = event.target;
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1500);
