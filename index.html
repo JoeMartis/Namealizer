@@ -306,7 +306,7 @@ function analyze() {
     return {
       id: i,
       original: name,
-      current: name.trim(), // trim for display but detect on original
+      current: name.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim(), // normalize for display
       issues: issues,
       details: issues.map(iss => issueDetail(iss, name)),
       suggestion: suggestFix(name),
@@ -327,10 +327,11 @@ function issueDetail(issueType, name) {
       if (/\t/.test(name)) return 'Contains tab characters';
       return 'Spacing issue';
     case 'caps':
-      const parts = name.trim().split(/\s+/);
-      if (parts.every(p => p === p.toUpperCase() && /[A-Z]/.test(p))) return 'ALL CAPS';
-      if (parts.every(p => p === p.toLowerCase())) return 'all lowercase';
-      if (parts.some(p => p.length > 1 && p[0] === p[0].toLowerCase() && /[A-Z]/.test(p.slice(1)))) return 'Inverted case';
+      const cParts = name.trim().split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
+      if (cParts.every(p => p === p.toUpperCase() && /[A-Z]/.test(p))) return 'ALL CAPS';
+      if (cParts.every(p => p === p.toLowerCase())) return 'all lowercase';
+      if (cParts.some(p => p.length > 1 && p[0] === p[0].toLowerCase() && /[A-Z]/.test(p.slice(1)))) return 'Inverted case';
+      if (cParts.some(p => p.length > 1 && p[0] === p[0].toLowerCase())) return 'Uncapitalized name part';
       return 'Mixed capitalization';
     case 'data':
       if (/\d/.test(name)) return 'Contains numbers';
@@ -392,9 +393,14 @@ function detectIssues(name) {
       p.length > 1 && p[0] === p[0].toLowerCase() && p[0] !== p[0].toUpperCase() &&
       p.slice(1).split('').some(c => c === c.toUpperCase() && c !== c.toLowerCase())
     );
+    // Check for uncapitalized name parts: "svetoslav Dzhonev" — first part not capitalized
+    const hasUncapitalized = significantParts.some(p =>
+      p.length > 1 && p[0] === p[0].toLowerCase() && p[0] !== p[0].toUpperCase()
+    );
     if (allLower) issues.push('caps');
-    if (allUpper && significantParts.length > 0) issues.push('caps');
-    if (invertedCase && !allUpper && !allLower) issues.push('caps');
+    else if (allUpper) issues.push('caps');
+    else if (invertedCase) issues.push('caps');
+    else if (hasUncapitalized) issues.push('caps');
   }
 
   // Single initial detection (but not if it's a known particle)
