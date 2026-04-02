@@ -306,7 +306,7 @@ function analyze() {
     return {
       id: i,
       original: name,
-      current: name.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim(), // normalize for display
+      current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(), // normalize for display
       issues: issues,
       details: issues.map(iss => issueDetail(iss, name)),
       suggestion: suggestFix(name),
@@ -322,9 +322,10 @@ function analyze() {
 function issueDetail(issueType, name) {
   switch(issueType) {
     case 'spacing':
+      if (/\t/.test(name)) return 'Contains tab characters';
+      if (/^".*"$/.test(name.trim())) return 'Wrapped in quotes (CSV artifact)';
       if (name !== name.trim()) return 'Leading/trailing whitespace';
       if (/  +/.test(name)) return 'Extra spaces between words';
-      if (/\t/.test(name)) return 'Contains tab characters';
       return 'Spacing issue';
     case 'caps':
       const cParts = name.trim().split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
@@ -362,8 +363,11 @@ function issueDetail(issueType, name) {
 
 function detectIssues(name) {
   const issues = [];
-  const trimmed = name.trim();
+  const trimmed = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').trim();
   const lower = trimmed.toLowerCase();
+
+  // Detect wrapping quotes or tabs as spacing issue
+  if (/\t/.test(name) || /^".*"$/.test(name.trim())) issues.push('spacing');
 
   // Placeholder detection
   if (PLACEHOLDERS.has(lower)) { issues.push('data'); return issues; }
@@ -373,10 +377,9 @@ function detectIssues(name) {
   if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(trimmed)) issues.push('data');
   if (/\xC3[\x80-\xBF]/.test(trimmed)) issues.push('data'); // mojibake
 
-  // Spacing issues
+  // Spacing issues (tabs and quotes already detected above)
   if (name !== name.trim()) issues.push('spacing'); // leading/trailing
   if (/  +/.test(trimmed)) issues.push('spacing');
-  if (/\t/.test(name)) issues.push('spacing');
   if ((trimmed.match(/,/g) || []).length > 1) issues.push('spacing');
   if (/[,.]$/.test(trimmed)) issues.push('spacing');
 
@@ -552,6 +555,9 @@ function suggestFix(name) {
   let fixed = name.trim();
   if (!fixed) return '';
 
+  // Strip CSV-style wrapping quotes and normalize tabs
+  fixed = fixed.replace(/^"|"$/g, '').replace(/\t/g, ' ');
+
   // Handle "Last, First" format -> "First Last"
   const commaMatch = fixed.match(/^([A-Za-z\u00C0-\u024F'-]+)\s*,\s*(.+)$/);
   if (commaMatch) {
@@ -656,6 +662,17 @@ function titleWord(s) {
     const orig3 = s[3];
     if (orig3 && orig3 === orig3.toUpperCase() && orig3 !== orig3.toLowerCase()) {
       return 'Mac' + s[3].toUpperCase() + s.slice(4).toLowerCase();
+    }
+  }
+
+  // Preserve camelCase name prefixes: DiMasi, DeLuca, LaForge, LeBron, DeWitt, etc.
+  const camelPrefixes = ['di','de','la','le','lo','du','da'];
+  for (const prefix of camelPrefixes) {
+    if (lo.startsWith(prefix) && s.length > prefix.length) {
+      const afterPrefix = s[prefix.length];
+      if (afterPrefix && afterPrefix === afterPrefix.toUpperCase() && afterPrefix !== afterPrefix.toLowerCase()) {
+        return prefix[0].toUpperCase() + prefix.slice(1) + afterPrefix.toUpperCase() + s.slice(prefix.length + 1).toLowerCase();
+      }
     }
   }
 
