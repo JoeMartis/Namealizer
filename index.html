@@ -737,14 +737,22 @@ function render() {
 
     return `<tr class="${rowClass}">
       <td>
-        <input class="name-input" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
-        ${e.current !== e.original.trim() ? `<div class="original-name">was: ${esc(e.original.trim())}</div>` : ''}
+        <input class="name-input" data-id="${e.id}" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
+        ${e.current !== e.original.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim() ? `<div class="original-name">was: ${esc(e.original.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim())}</div>` : ''}
       </td>
       <td><div class="tags">${tags || '<span style="color:var(--success)">Clean</span>'}</div></td>
       <td>${suggestion}</td>
       <td><div class="action-btns">${actions.join('')}</div></td>
     </tr>`;
   }).join('');
+
+  // Set input values via DOM to avoid HTML attribute escaping issues
+  requestAnimationFrame(() => {
+    tbody.querySelectorAll('input.name-input[data-id]').forEach(input => {
+      const id = parseInt(input.dataset.id);
+      if (entries[id]) input.value = entries[id].current;
+    });
+  });
 }
 
 function esc(s) {
