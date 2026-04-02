@@ -346,7 +346,8 @@ function analyze() {
   const lines = raw.split('\n').filter(l => l.trim().length > 0);
   entries = lines.map((name, i) => {
     const issues = detectIssues(name);
-    const suggestion = issues.length > 0 ? suggestFix(name) : '';
+    const NO_AUTOFIX = ['data', 'merged', 'truncated'];
+    const suggestion = issues.length > 0 && !issues.some(i => NO_AUTOFIX.includes(i)) ? suggestFix(name) : '';
     return {
       id: i,
       original: name,
@@ -938,7 +939,8 @@ function updateName(id, value) {
   entries[id].current = value;
   entries[id].issues = detectIssues(value);
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, value));
-  entries[id].suggestion = entries[id].issues.length > 0 ? suggestFix(value) : '';
+  const NO_AUTOFIX = ['data', 'merged', 'truncated'];
+  entries[id].suggestion = entries[id].issues.length > 0 && !entries[id].issues.some(i => NO_AUTOFIX.includes(i)) ? suggestFix(value) : '';
   stripDupeIssues(); markDuplicates(); render();
 }
 
