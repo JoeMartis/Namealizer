@@ -339,6 +339,9 @@ function issueDetail(issueType, name) {
       if (PLACEHOLDERS.has(name.trim().toLowerCase())) return 'Placeholder entry';
       if (/\xC3[\x80-\xBF]/.test(name)) return 'Possible encoding issue (mojibake)';
       if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(name)) return 'Contains special characters';
+      const dParts = name.trim().split(/\s+/).map(p => p.replace(/[^a-zA-Z\u00C0-\u024F'-]/g, '').toLowerCase()).filter(p => p.length > 1);
+      const dSeen = new Set();
+      for (const p of dParts) { if (dSeen.has(p)) return 'Repeated name part: "' + p + '"'; dSeen.add(p); }
       return 'Data entry error';
     case 'initial':
       return 'Single-letter initial(s) — may be truncated';
@@ -449,6 +452,16 @@ function detectIssues(name) {
           issues.push('reversed');
         }
       }
+    }
+  }
+
+  // Repeated name parts within a single entry (e.g. "Fekri M Wa'el M Fekri Zaid Alkilani")
+  if (alphaParts.length >= 4) {
+    const lowerParts = alphaParts.map(p => p.toLowerCase()).filter(p => p.length > 1);
+    const seen = new Set();
+    for (const p of lowerParts) {
+      if (seen.has(p)) { issues.push('data'); break; }
+      seen.add(p);
     }
   }
 
