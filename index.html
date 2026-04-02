@@ -340,13 +340,14 @@ function analyze() {
   const lines = raw.split('\n').filter(l => l.trim().length > 0);
   entries = lines.map((name, i) => {
     const issues = detectIssues(name);
+    const suggestion = issues.length > 0 ? suggestFix(name) : '';
     return {
       id: i,
       original: name,
       current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(), // normalize for display
       issues: issues,
       details: issues.map(iss => issueDetail(iss, name)),
-      suggestion: suggestFix(name),
+      suggestion: suggestion,
       accepted: false,
       dismissed: false,
     };
@@ -728,6 +729,13 @@ function titleWord(s) {
     }
   }
 
+  // If already capitalized and has intentional internal caps we don't recognize,
+  // preserve original casing (e.g. InJoo, SunHee, JiYeon, DeAndre)
+  if (s[0] === s[0].toUpperCase() && s.length > 2 &&
+      s.slice(1).split('').some(c => c === c.toUpperCase() && c !== c.toLowerCase())) {
+    return s;
+  }
+
   return s[0].toUpperCase() + s.slice(1).toLowerCase();
 }
 
@@ -870,7 +878,7 @@ function updateName(id, value) {
   entries[id].current = value;
   entries[id].issues = detectIssues(value);
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, value));
-  entries[id].suggestion = suggestFix(value);
+  entries[id].suggestion = entries[id].issues.length > 0 ? suggestFix(value) : '';
   stripDupeIssues(); markDuplicates(); render();
 }
 
