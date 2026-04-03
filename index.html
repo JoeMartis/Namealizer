@@ -98,12 +98,6 @@
         <div class="stats" id="stats"></div>
       </div>
       <div class="filter-bar" id="filterBar"></div>
-      <div style="margin-bottom:0.75rem;">
-        <label style="font-size:0.82rem; color:var(--text-muted); cursor:pointer; user-select:none;">
-          <input type="checkbox" id="showSpacing" onchange="toggleShowSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
-          Show whitespace/tab issues
-        </label>
-      </div>
       <div style="overflow-x:auto;">
         <table class="results-table">
           <thead><tr>
@@ -134,13 +128,11 @@
 <script>
 let entries = [];
 let activeFilter = 'all';
-let ignoreSpacing = true;
 const inputMode = 'csv';
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
   caps:      { label: 'Capitalization', cls: 'tag-caps', confidence: 'high' },
-  spacing:   { label: 'Spacing/Punctuation', cls: 'tag-spacing', confidence: 'high' },
   data:      { label: 'Data Error', cls: 'tag-data', confidence: 'high' },
   format:    { label: 'Unusual Format', cls: 'tag-format', confidence: 'low' },
   duplicate: { label: 'Duplicate', cls: 'tag-duplicate', confidence: 'high' },
@@ -182,11 +174,6 @@ function getConfidence(issueType, detail) {
     if (detail && detail.includes('Last, First')) return 8;
     if (detail && detail.includes('family-name-first')) return 3;
     return 5;
-  }
-  if (issueType === 'spacing') {
-    if (detail && detail.includes('tab')) return 9;
-    if (detail && detail.includes('quotes')) return 8;
-    return 7;
   }
   if (issueType === 'duplicate') return 9;
   if (issueType === 'neardupe') return 5;
@@ -626,12 +613,6 @@ function issueDetail(issueType, name) {
   // Clean version for analysis (strip quotes, tabs)
   const clean = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').trim();
   switch(issueType) {
-    case 'spacing':
-      if (/\t/.test(name)) return 'Contains tab characters';
-      if (/^".*"$/.test(name.trim())) return 'Wrapped in quotes (CSV artifact)';
-      if (name !== name.trim()) return 'Leading/trailing whitespace';
-      if (/  +/.test(clean)) return 'Extra spaces between words';
-      return 'Spacing issue';
     case 'caps':
       const cParts = clean.split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
       if (cParts.length === 0) return 'Mixed capitalization';
@@ -694,9 +675,6 @@ function detectIssues(name) {
   const trimmed = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').trim();
   const lower = trimmed.toLowerCase();
 
-  // Detect wrapping quotes or tabs as spacing issue
-  if (/\t/.test(name) || /^".*"$/.test(name.trim())) issues.push('spacing');
-
   // Placeholder detection
   if (PLACEHOLDERS.has(lower)) { issues.push('data'); return issues; }
 
@@ -710,12 +688,6 @@ function detectIssues(name) {
   if (trimmed.split(/\s+/).some(t => /^[A-Z][a-z]+[A-Z][a-z]+$/.test(t) && t.length > 6)) issues.push('data');
   // S/O, D/O, W/O formal records
   if (/\b[SDW]\/O\b/i.test(trimmed)) issues.push('format');
-
-  // Spacing issues (tabs and quotes already detected above)
-  if (name !== name.trim()) issues.push('spacing'); // leading/trailing
-  if (/  +/.test(trimmed)) issues.push('spacing');
-  if ((trimmed.match(/,/g) || []).length > 1) issues.push('spacing');
-  if (/[,.]$/.test(trimmed)) issues.push('spacing');
 
   // Extract alpha parts for analysis
   const tokens = trimmed.split(/\s+/).filter(Boolean);
@@ -833,7 +805,7 @@ function detectIssues(name) {
   // (strongly suggests it was cut off mid-entry by a field-length limit)
   if (trimmed.length >= 10) {
     const rawTrimEnd = name.replace(/^"|"$/g, '').replace(/\t/g, ' ');
-    if (rawTrimEnd.length > trimmed.length && /\s$/.test(rawTrimEnd) && !issues.includes('spacing')) {
+    if (rawTrimEnd.length > trimmed.length && /\s$/.test(rawTrimEnd)) {
       issues.push('truncated');
     }
   }
@@ -1153,25 +1125,18 @@ function titleWord(s) {
 
 // ========== RENDERING ==========
 
-// Get visible issues for an entry (respects ignoreSpacing toggle)
-function visibleIssues(e) {
-  if (!ignoreSpacing) return e.issues;
-  return e.issues.filter(i => i !== 'spacing');
-}
-
 function render() {
   const tbody = document.getElementById('resultsBody');
   const filtered = entries.filter(e => {
     if (e.dismissed) return false;
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'issues') return visibleIssues(e).length > 0;
-    if (activeFilter === 'clean') return visibleIssues(e).length === 0;
-    if (activeFilter === 'spacing' && ignoreSpacing) return false;
+    if (activeFilter === 'issues') return e.issues.length > 0;
+    if (activeFilter === 'clean') return e.issues.length === 0;
     return e.issues.includes(activeFilter);
   });
 
   const total = entries.filter(e => !e.dismissed).length;
-  const withIssues = entries.filter(e => !e.dismissed && visibleIssues(e).length > 0).length;
+  const withIssues = entries.filter(e => !e.dismissed && e.issues.length > 0).length;
   const dismissedCount = entries.filter(e => e.dismissed).length;
   document.getElementById('stats').innerHTML =
     `<span><strong>${total}</strong> names</span>` +
@@ -1189,7 +1154,7 @@ function render() {
 
   const issueCounts = {};
   entries.filter(e => !e.dismissed).forEach(e => {
-    visibleIssues(e).forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
+    e.issues.forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
   });
 
   let filterHTML = `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All (${total})</button>`;
@@ -1209,12 +1174,10 @@ function render() {
   }
 
   tbody.innerHTML = filtered.map(e => {
-    const vis = visibleIssues(e);
-    const hasIssues = vis.length > 0;
+    const hasIssues = e.issues.length > 0;
     const rowClass = hasIssues ? '' : 'row-clean';
 
     const tags = e.issues.map((iss, idx) => {
-      if (ignoreSpacing && iss === 'spacing') return '';
       const info = ISSUE_TYPES[iss];
       if (!info) return '';
       const detail = e.details[idx] || '';
@@ -1225,7 +1188,6 @@ function render() {
     let topScore = 0;
     if (hasIssues) {
       e.issues.forEach((iss, idx) => {
-        if (ignoreSpacing && iss === 'spacing') return;
         const s = getConfidence(iss, e.details[idx] || '');
         if (s > topScore) topScore = s;
       });
@@ -1281,10 +1243,6 @@ function esc(s) {
 
 function setFilter(f) { activeFilter = f; render(); }
 
-function toggleShowSpacing() {
-  ignoreSpacing = !document.getElementById('showSpacing').checked;
-  render();
-}
 
 function updateName(id, value) {
   entries[id].current = value;
