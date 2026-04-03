@@ -100,8 +100,8 @@
       <div class="filter-bar" id="filterBar"></div>
       <div style="margin-bottom:0.75rem;">
         <label style="font-size:0.82rem; color:var(--text-muted); cursor:pointer; user-select:none;">
-          <input type="checkbox" id="ignoreSpacing" checked onchange="toggleIgnoreSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
-          Ignore whitespace/tab issues
+          <input type="checkbox" id="showSpacing" onchange="toggleShowSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
+          Show whitespace/tab issues
         </label>
       </div>
       <div style="overflow-x:auto;">
@@ -1281,8 +1281,8 @@ function esc(s) {
 
 function setFilter(f) { activeFilter = f; render(); }
 
-function toggleIgnoreSpacing() {
-  ignoreSpacing = document.getElementById('ignoreSpacing').checked;
+function toggleShowSpacing() {
+  ignoreSpacing = !document.getElementById('showSpacing').checked;
   render();
 }
 
