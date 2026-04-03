@@ -243,13 +243,18 @@ const COMMON_FIRST = new Set([
   'mohamed','ahmed','ali','omar','fatima','hassan','ibrahim','youssef','mustafa','khalid',
   'tariq','rashid','nour','layla','amira','salma','zainab','aisha','hana','rania',
   'abdallah','karim','samir','nadia','mariam','yusuf','hamza','bilal','sami','mona',
-  // Chinese given names (romanized)
+  // Chinese given names (romanized — Mandarin Pinyin)
   'wei','min','jun','yan','lei','jing','fang','xia','hong','ping','ling','mei','yun',
   'xiaoming','xiaohua','jianjun','guoqiang','shuying','lili','xiaoli','minghui','haoran',
   'yuxuan','zihan','haoyu','jiayi','yichen','zimo','yinuo','xinyi','ruoxi','siyu',
   'chenxi','zitong','yufei','tianyu','bowen','junhao','zijun','yuxin','zeyu','haochen',
   'wenxuan','yiming','jiahao','ziyi','xinyue','mengqi','ruiqi','qianyu','yuqi','hanyu',
   'cheng','qiang','hua','tao','peng','bo','hao','nan','yu','yi','xin','hui','lin',
+  'anqi','linghui','yuhan','shiqi','peiyao','jingyi','mingyuan','wenjing','zhiyu','xueying',
+  'kaixin','ruohan','yuanbo','siyuan','lingfei','zhaoyang','yutong','weijie','qinghe','jiarui',
+  // Cantonese / Hong Kong given names
+  'wing','wai','siu','kai','kin','man','yee','fai','ming','chi','lok','yin','hoi',
+  'tsz','pui','tak','sum','chun','kwai','ngo','fong','kit','wah','hang','yuk','kei',
   // Japanese given names
   'hiroshi','yuki','kenji','takeshi','aki','haruto','yuto','sota','riku','hinata','sakura',
   'aoi','hana','yui','mio','ren','kaito','sora','minato','akari','koharu',
@@ -369,12 +374,22 @@ const COMMON_LAST = new Set([
   'jayawardena','perera','wickramasinghe','ratnayake','bandara','dissanayake','senanayake',
   'adhikari','basnet','karki','bhandari','tamang','gurung','shrestha','thapa',
   'akter','begum','mullah',
-  // Chinese surnames
+  // Chinese surnames (Mandarin Pinyin)
   'wang','chen','li','zhang','liu','yang','huang','zhao','wu','zhou','xu','sun','ma',
   'zhu','hu','guo','lin','he','gao','luo','zheng','liang','xie','tang','deng','feng',
   'han','cao','peng','zeng','xiao','tian','dong','pan','yuan','yu','jiang','cai','jia','ding',
   'ye','lu','wei','ren','yao','shao','qian','dai','fan','fang','shi','xiong','jin','qiu',
-  'bai','zou','kong','cui','kang','mao','wan','gu','lai','hao','gong','cheng','shao',
+  'bai','zou','kong','cui','kang','mao','wan','gu','lai','hao','gong','cheng',
+  // Cantonese / Hong Kong romanized surnames
+  'wong','chan','cheung','leung','lau','tam','tse','kwok','chow','fung','yip','siu','mak',
+  'ho','lui','pang','au','yeung','lok','yuen','tong','shum','woo','hung','kwong','fong',
+  'kok','kwan','chu','mui','chun','sin','szeto','lo','ip','ngan',
+  // Taiwanese romanized surnames (Wade-Giles)
+  'tsai','hsieh','hsiao','chiang','tseng','hsu','chang','kuo','shih','chiou','liao','chung',
+  'tsou','yen','tung','pai','tzeng',
+  // Hokkien / Teochew / SE Asian Chinese surnames
+  'tan','lim','ong','goh','chua','koh','teo','ang','sim','chia','seah','yeo','quek',
+  'phua','beh','tay','wee','heng','png','ooi',
   // Korean surnames
   'kim','park','choi','cho','yoon','kang','jung','lim','han','song','shin','kwon','hwang',
   'ahn','yoo','seo','moon','bae','jang','ryu','oh','byun','noh','ha','ko','woo',
@@ -421,13 +436,23 @@ const COMMON_LAST = new Set([
 // These are common surnames that, when appearing as the FIRST word, suggest
 // the name may be in Last-First order (East Asian, Hungarian, etc.)
 const FAMILY_FIRST_SURNAMES = new Set([
-  // Chinese (top ~60 surnames cover >95% of population)
+  // Chinese — Mandarin Pinyin
   'wang','li','zhang','liu','chen','yang','huang','zhao','wu','zhou',
   'xu','sun','ma','zhu','hu','guo','lin','he','gao','luo',
   'zheng','liang','xie','tang','deng','feng','han','cao','peng','zeng',
   'xiao','tian','dong','pan','yuan','yu','jiang','cai','jia','ding',
   'ye','lu','wei','ren','yao','shao','qian','dai','fan','fang','shi','xiong','jin','qiu',
   'bai','zou','kong','cui','kang','mao','wan','gu','lai','hao','gong','cheng',
+  // Chinese — Cantonese / Hong Kong
+  'wong','chan','cheung','leung','lau','tam','tse','kwok','chow','fung','yip','siu','mak',
+  'ho','lui','pang','au','yeung','lok','yuen','tong','shum','woo','hung','kwong','fong',
+  'kok','kwan','chu','mui','chun','sin','szeto','lo','ip','ngan',
+  // Chinese — Taiwanese (Wade-Giles)
+  'tsai','hsieh','hsiao','chiang','tseng','hsu','chang','kuo','shih','chiou','liao','chung',
+  'tsou','yen','tung','pai','tzeng',
+  // Chinese — Hokkien / Teochew / SE Asian
+  'tan','lim','ong','goh','chua','koh','teo','ang','sim','chia','seah','yeo','quek',
+  'phua','beh','tay','wee','heng','png','ooi',
   // Korean
   'kim','park','lee','choi','jung','kang','cho','yoon','jang','lim',
   'han','shin','kwon','hwang','song','ahn','yoo','seo','moon','bae',
