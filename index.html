@@ -141,7 +141,6 @@ const ISSUE_TYPES = {
   merged:    { label: 'Merged Entry', cls: 'tag-data', confidence: 'high' },
   truncated: { label: 'Possibly Truncated', cls: 'tag-data', confidence: 'medium' },
   listformat: { label: 'Format Outlier', cls: 'tag-format', confidence: 'medium' },
-  listvariant: { label: 'Possible Typo (list)', cls: 'tag-spelling', confidence: 'medium' },
   listswapped: { label: 'Swapped (confirmed)', cls: 'tag-reversed', confidence: 'high' },
 };
 
@@ -184,7 +183,6 @@ function getConfidence(issueType, detail) {
   if (issueType === 'spelling') return 3;
   if (issueType === 'format') return 2;
   if (issueType === 'listformat') return 5;
-  if (issueType === 'listvariant') return 7;
   if (issueType === 'listswapped') return 9;
   return 3;
 }
@@ -856,41 +854,7 @@ function markListContext() {
   });
   // Don't add listformat if already flagged for caps (redundant)
 
-  // --- 2. SURNAME FREQUENCY CROSS-REFERENCE ---
-  // Build a frequency map of name parts, then flag rare 1-off variants
-  const partFreq = new Map();
-  active.forEach(e => {
-    const parts = e.current.split(/\s+/).filter(p => p.length > 2);
-    parts.forEach(p => {
-      const lo = p.toLowerCase();
-      partFreq.set(lo, (partFreq.get(lo) || 0) + 1);
-    });
-  });
-
-  // For each name part that appears only once, check if a similar part (edit distance 1) appears 2+ times
-  active.forEach(e => {
-    if (e.dismissed) return;
-    const parts = e.current.split(/\s+/).filter(p => p.length > 3);
-    for (const part of parts) {
-      const lo = part.toLowerCase();
-      if (partFreq.get(lo) !== 1) continue; // only check singletons
-      // Check against frequent parts
-      for (const [freq_part, count] of partFreq) {
-        if (count < 2 || freq_part === lo) continue;
-        if (Math.abs(freq_part.length - lo.length) > 1) continue; // quick skip
-        const dist = editDistance(lo, freq_part);
-        if (dist === 1) {
-          if (!e.issues.includes('listvariant')) {
-            e.issues.push('listvariant');
-            e.details.push('"' + part + '" appears once — did you mean "' + freq_part.charAt(0).toUpperCase() + freq_part.slice(1) + '" (' + count + ' others)?');
-          }
-          break;
-        }
-      }
-    }
-  });
-
-  // --- 3. SWAPPED-NAME CROSS-REFERENCE ---
+  // --- 2. SWAPPED-NAME CROSS-REFERENCE ---
   // If "John Smith" and "Smith John" both appear, flag the less common ordering
   const nameNorm = new Map(); // normalized "first last" → entry index
   active.forEach(e => {
@@ -1238,7 +1202,7 @@ function acceptAllSuggestions() {
 }
 
 // Helper: strip list-context issues (duplicates, cross-ref) and their details
-const CONTEXT_ISSUES = new Set(['duplicate','neardupe','listformat','listvariant','listswapped']);
+const CONTEXT_ISSUES = new Set(['duplicate','neardupe','listformat','listswapped']);
 function stripContextIssues() {
   entries.forEach(e => {
     const keep = [];
