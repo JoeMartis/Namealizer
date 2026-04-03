@@ -140,6 +140,9 @@ const ISSUE_TYPES = {
   title:     { label: 'Has Title/Honorific', cls: 'tag-format', confidence: 'high' },
   merged:    { label: 'Merged Entry', cls: 'tag-data', confidence: 'high' },
   truncated: { label: 'Possibly Truncated', cls: 'tag-data', confidence: 'medium' },
+  listformat: { label: 'Format Outlier', cls: 'tag-format', confidence: 'medium' },
+  listvariant: { label: 'Possible Typo (list)', cls: 'tag-spelling', confidence: 'medium' },
+  listswapped: { label: 'Swapped (confirmed)', cls: 'tag-reversed', confidence: 'high' },
 };
 
 // Per-issue confidence can be overridden by detection logic
@@ -180,6 +183,9 @@ function getConfidence(issueType, detail) {
   if (issueType === 'initial') return 3;
   if (issueType === 'spelling') return 3;
   if (issueType === 'format') return 2;
+  if (issueType === 'listformat') return 5;
+  if (issueType === 'listvariant') return 7;
+  if (issueType === 'listswapped') return 9;
   return 3;
 }
 
@@ -497,7 +503,7 @@ function analyze() {
       dismissed: false,
     };
   });
-  markDuplicates();
+  markDuplicates(); markListContext();
   render();
   document.getElementById('resultsSection').style.display = '';
 }
@@ -803,6 +809,113 @@ function markDuplicates() {
   }
 }
 
+// ========== LIST-CONTEXT ANALYSIS ==========
+// These checks use the full list to find issues that can't be detected per-name
+
+function markListContext() {
+  const active = entries.filter(e => !e.dismissed);
+  if (active.length < 3) return; // need enough names for context
+
+  // --- 1. FORMAT CONSISTENCY ---
+  // Detect the dominant format and flag outliers
+  let commaCount = 0, normalCount = 0;
+  active.forEach(e => {
+    if (/^[A-Za-z\u00C0-\u024F'-]+\s*,/.test(e.current)) commaCount++;
+    else normalCount++;
+  });
+  const dominantIsComma = commaCount > normalCount && commaCount >= 3;
+  const dominantIsNormal = normalCount > commaCount && normalCount >= 3;
+  // Only flag if there's a strong majority (>80%)
+  const total = commaCount + normalCount;
+  if (dominantIsNormal && commaCount > 0 && commaCount / total < 0.2) {
+    active.forEach(e => {
+      if (/^[A-Za-z\u00C0-\u024F'-]+\s*,/.test(e.current) && !e.issues.includes('listformat')) {
+        e.issues.push('listformat');
+        e.details.push('Uses "Last, First" format but ' + Math.round(normalCount/total*100) + '% of list uses "First Last"');
+      }
+    });
+  }
+  if (dominantIsComma && normalCount > 0 && normalCount / total < 0.2) {
+    active.forEach(e => {
+      if (!/^[A-Za-z\u00C0-\u024F'-]+\s*,/.test(e.current) && !e.issues.includes('listformat')) {
+        e.issues.push('listformat');
+        e.details.push('Uses "First Last" format but ' + Math.round(commaCount/total*100) + '% of list uses "Last, First"');
+      }
+    });
+  }
+
+  // Case consistency: if >80% are title case and some are all-lower or all-upper
+  let titleCount = 0, otherCaseCount = 0;
+  active.forEach(e => {
+    const parts = e.current.split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
+    if (parts.length > 0 && parts.every(p => p[0] === p[0].toUpperCase() && p.slice(1) !== p.slice(1).toUpperCase())) {
+      titleCount++;
+    } else if (parts.length > 0) {
+      otherCaseCount++;
+    }
+  });
+  // Don't add listformat if already flagged for caps (redundant)
+
+  // --- 2. SURNAME FREQUENCY CROSS-REFERENCE ---
+  // Build a frequency map of name parts, then flag rare 1-off variants
+  const partFreq = new Map();
+  active.forEach(e => {
+    const parts = e.current.split(/\s+/).filter(p => p.length > 2);
+    parts.forEach(p => {
+      const lo = p.toLowerCase();
+      partFreq.set(lo, (partFreq.get(lo) || 0) + 1);
+    });
+  });
+
+  // For each name part that appears only once, check if a similar part (edit distance 1) appears 2+ times
+  active.forEach(e => {
+    if (e.dismissed) return;
+    const parts = e.current.split(/\s+/).filter(p => p.length > 3);
+    for (const part of parts) {
+      const lo = part.toLowerCase();
+      if (partFreq.get(lo) !== 1) continue; // only check singletons
+      // Check against frequent parts
+      for (const [freq_part, count] of partFreq) {
+        if (count < 2 || freq_part === lo) continue;
+        if (Math.abs(freq_part.length - lo.length) > 1) continue; // quick skip
+        const dist = editDistance(lo, freq_part);
+        if (dist === 1) {
+          if (!e.issues.includes('listvariant')) {
+            e.issues.push('listvariant');
+            e.details.push('"' + part + '" appears once — did you mean "' + freq_part.charAt(0).toUpperCase() + freq_part.slice(1) + '" (' + count + ' others)?');
+          }
+          break;
+        }
+      }
+    }
+  });
+
+  // --- 3. SWAPPED-NAME CROSS-REFERENCE ---
+  // If "John Smith" and "Smith John" both appear, flag the less common ordering
+  const nameNorm = new Map(); // normalized "first last" → entry index
+  active.forEach(e => {
+    const parts = e.current.trim().split(/\s+/).filter(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
+    if (parts.length === 2) {
+      const key = parts.map(p => p.toLowerCase()).join(' ');
+      const rev = parts.map(p => p.toLowerCase()).reverse().join(' ');
+      if (nameNorm.has(rev)) {
+        const otherIdx = nameNorm.get(rev);
+        const other = entries[otherIdx];
+        // Flag both, but with different messages
+        if (!e.issues.includes('listswapped')) {
+          e.issues.push('listswapped');
+          e.details.push('Reversed version exists: "' + other.current + '" (row ' + (otherIdx + 1) + ')');
+        }
+        if (!other.issues.includes('listswapped')) {
+          other.issues.push('listswapped');
+          other.details.push('Reversed version exists: "' + e.current + '" (row ' + (e.id + 1) + ')');
+        }
+      }
+      if (!nameNorm.has(key)) nameNorm.set(key, e.id);
+    }
+  });
+}
+
 
 // ========== SUGGESTION ENGINE ==========
 
@@ -1086,7 +1199,7 @@ function updateName(id, value) {
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, value));
   const NO_AUTOFIX = ['data', 'merged', 'truncated'];
   entries[id].suggestion = entries[id].issues.length > 0 && !entries[id].issues.some(i => NO_AUTOFIX.includes(i)) ? suggestFix(value) : '';
-  stripDupeIssues(); markDuplicates(); render();
+  stripContextIssues(); markDuplicates(); markListContext(); render();
 }
 
 function acceptSuggestion(id) {
@@ -1095,8 +1208,8 @@ function acceptSuggestion(id) {
   entries[id].issues = detectIssues(entries[id].current);
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, entries[id].current));
   entries[id].suggestion = suggestFix(entries[id].current);
-  stripDupeIssues();
-  markDuplicates();
+  stripContextIssues();
+  markDuplicates(); markListContext();
   render();
 }
 
@@ -1104,8 +1217,8 @@ function dismissEntry(id) { entries[id].dismissed = true; render(); }
 
 function undoAllDismissed() {
   entries.forEach(e => { e.dismissed = false; });
-  stripDupeIssues();
-  markDuplicates();
+  stripContextIssues();
+  markDuplicates(); markListContext();
   render();
 }
 
@@ -1119,18 +1232,19 @@ function acceptAllSuggestions() {
       e.suggestion = suggestFix(e.current);
     }
   });
-  stripDupeIssues();
-  markDuplicates();
+  stripContextIssues();
+  markDuplicates(); markListContext();
   render();
 }
 
-// Helper: strip duplicate/neardupe issues and their corresponding details
-function stripDupeIssues() {
+// Helper: strip list-context issues (duplicates, cross-ref) and their details
+const CONTEXT_ISSUES = new Set(['duplicate','neardupe','listformat','listvariant','listswapped']);
+function stripContextIssues() {
   entries.forEach(e => {
     const keep = [];
     const keepDetails = [];
     for (let i = 0; i < e.issues.length; i++) {
-      if (e.issues[i] !== 'duplicate' && e.issues[i] !== 'neardupe') {
+      if (!CONTEXT_ISSUES.has(e.issues[i])) {
         keep.push(e.issues[i]);
         keepDetails.push(e.details[i]);
       }
