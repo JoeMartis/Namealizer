@@ -21,7 +21,7 @@
     --tag-spelling: #fdf2f8; --tag-spelling-text: #831843;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
-  .container { max-width: 1140px; margin: 0 auto; padding: 2rem 1rem; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 2rem 1rem; }
   h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
   .subtitle { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
@@ -74,9 +74,19 @@
 <body>
 <div class="container">
   <h1>Namealizer</h1>
-  <p class="subtitle">Paste a list of names (one per line) to detect formatting issues, duplicates, and data entry errors.</p>
+  <p class="subtitle">Paste a list of names to detect formatting issues, duplicates, and data entry errors.</p>
   <div class="card">
     <h2>Input Names</h2>
+    <div style="margin-bottom:0.75rem; display:flex; gap:1.5rem; font-size:0.85rem;">
+      <label style="cursor:pointer;">
+        <input type="radio" name="inputMode" value="list" checked onchange="setInputMode('list')" style="margin-right:0.3rem;" />
+        Plain list (one name per line)
+      </label>
+      <label style="cursor:pointer;">
+        <input type="radio" name="inputMode" value="csv" onchange="setInputMode('csv')" style="margin-right:0.3rem;" />
+        CSV: F_Name, L_Name, user_full_name
+      </label>
+    </div>
     <textarea id="nameInput" placeholder="Paste names here, one per line..."></textarea>
     <div class="btn-row">
       <button class="btn-primary" onclick="analyze()">Analyze Names</button>
@@ -99,7 +109,7 @@
       </div>
       <div style="overflow-x:auto;">
         <table class="results-table">
-          <thead><tr>
+          <thead id="resultsHead"><tr>
             <th style="width:24%">Name</th>
             <th style="width:26%">Issues</th>
             <th style="width:22%">Suggested Fix</th>
@@ -126,6 +136,7 @@
 let entries = [];
 let activeFilter = 'all';
 let ignoreSpacing = true;
+let inputMode = 'list'; // 'list' or 'csv'
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -142,6 +153,10 @@ const ISSUE_TYPES = {
   truncated: { label: 'Possibly Truncated', cls: 'tag-data', confidence: 'medium' },
   listformat: { label: 'Format Outlier', cls: 'tag-format', confidence: 'medium' },
   listswapped: { label: 'Swapped (confirmed)', cls: 'tag-reversed', confidence: 'high' },
+  xfield_missing: { label: 'Name Part Missing', cls: 'tag-data', confidence: 'high' },
+  xfield_mismatch: { label: 'Fields Mismatch', cls: 'tag-data', confidence: 'high' },
+  xfield_swapped: { label: 'F/L Names Swapped', cls: 'tag-reversed', confidence: 'high' },
+  xfield_extra: { label: 'Extra in Full Name', cls: 'tag-format', confidence: 'low' },
 };
 
 // Per-issue confidence can be overridden by detection logic
@@ -184,6 +199,10 @@ function getConfidence(issueType, detail) {
   if (issueType === 'format') return 2;
   if (issueType === 'listformat') return 5;
   if (issueType === 'listswapped') return 9;
+  if (issueType === 'xfield_missing') return 8;
+  if (issueType === 'xfield_mismatch') return 8;
+  if (issueType === 'xfield_swapped') return 9;
+  if (issueType === 'xfield_extra') return 2;
   return 3;
 }
 
@@ -481,26 +500,140 @@ const FAMILY_FIRST_SURNAMES = new Set([
 
 // ========== DETECTION ENGINE ==========
 
+function setInputMode(mode) {
+  inputMode = mode;
+  const ta = document.getElementById('nameInput');
+  if (mode === 'csv') {
+    ta.placeholder = 'Paste CSV data: F_Name, L_Name, user_full_name (one record per line)\n\nExample:\nJohn,Smith,John Smith\nJane,Doe,Jane Marie Doe';
+  } else {
+    ta.placeholder = 'Paste names here, one per line...';
+  }
+}
+
+function parseCSVLine(line) {
+  // Handle quoted CSV fields: "Smith, Jr.",John,"John Smith, Jr."
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if ((ch === ',' || ch === '\t') && !inQuotes) { fields.push(current.trim()); current = ''; continue; }
+    current += ch;
+  }
+  fields.push(current.trim());
+  return fields;
+}
+
+function crossFieldCheck(fName, lName, fullName) {
+  const issues = [];
+  const details = [];
+  const fLo = fName.toLowerCase().trim();
+  const lLo = lName.toLowerCase().trim();
+  const fullLo = fullName.toLowerCase().trim();
+  const fullParts = fullLo.split(/\s+/);
+
+  if (!fLo || !lLo || !fullLo) return { issues, details };
+
+  const fullContainsFirst = fullParts.some(p => p === fLo || fullLo.includes(fLo));
+  const fullContainsLast = fullParts.some(p => p === lLo || fullLo.includes(lLo));
+
+  // Check if F/L names are swapped: full name contains last name first, or F_Name matches common last names
+  const fullStartsWithLast = fullParts[0] === lLo || fullLo.startsWith(lLo);
+  const fullEndsWithFirst = fullParts[fullParts.length - 1] === fLo;
+  if (fullContainsFirst && fullContainsLast && fullStartsWithLast && fullEndsWithFirst && fLo !== lLo) {
+    issues.push('xfield_swapped');
+    details.push('F_Name "' + fName + '" and L_Name "' + lName + '" appear swapped (full name: "' + fullName + '")');
+    return { issues, details };
+  }
+
+  // Check if fields are swapped: F_Name looks like a surname, L_Name looks like a given name
+  if (COMMON_LAST.has(fLo) && COMMON_FIRST.has(lLo) && !COMMON_FIRST.has(fLo) && fullContainsFirst && fullContainsLast) {
+    issues.push('xfield_swapped');
+    details.push('F_Name "' + fName + '" looks like a surname, L_Name "' + lName + '" looks like a given name');
+    return { issues, details };
+  }
+
+  // Missing parts
+  if (!fullContainsFirst && !fullContainsLast) {
+    issues.push('xfield_mismatch');
+    details.push('Full name "' + fullName + '" doesn\'t contain F_Name "' + fName + '" or L_Name "' + lName + '"');
+  } else if (!fullContainsFirst) {
+    issues.push('xfield_missing');
+    details.push('F_Name "' + fName + '" not found in full name "' + fullName + '"');
+  } else if (!fullContainsLast) {
+    issues.push('xfield_missing');
+    details.push('L_Name "' + lName + '" not found in full name "' + fullName + '"');
+  }
+
+  // Extra parts in full name (not an error, just informational)
+  if (fullContainsFirst && fullContainsLast && issues.length === 0) {
+    const expectedParts = (fName + ' ' + lName).toLowerCase().split(/\s+/);
+    const extraParts = fullParts.filter(p => !expectedParts.includes(p) && !SINGLE_PARTICLES.has(p));
+    if (extraParts.length > 0) {
+      issues.push('xfield_extra');
+      details.push('Full name has extra parts: "' + extraParts.join(', ') + '" (middle name, suffix, etc.)');
+    }
+  }
+
+  return { issues, details };
+}
+
 function analyze() {
   const raw = document.getElementById('nameInput').value;
   if (!raw.trim()) return;
-  // Preserve original whitespace for detection but split on newlines
+
   const lines = raw.split('\n').filter(l => l.trim().length > 0);
-  entries = lines.map((name, i) => {
+
+  // Skip header row if it looks like one
+  let startIdx = 0;
+  if (inputMode === 'csv' && lines.length > 1) {
+    const firstFields = parseCSVLine(lines[0]);
+    const headerish = firstFields.some(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, '')));
+    if (headerish) startIdx = 1;
+  }
+
+  const dataLines = lines.slice(startIdx);
+
+  entries = dataLines.map((line, i) => {
+    let name, fName = '', lName = '';
+
+    if (inputMode === 'csv') {
+      const fields = parseCSVLine(line);
+      fName = (fields[0] || '').trim();
+      lName = (fields[1] || '').trim();
+      name = (fields[2] || '').trim() || (fName + ' ' + lName).trim(); // fallback to concat
+    } else {
+      name = line;
+    }
+
     const issues = detectIssues(name);
     const NO_AUTOFIX = ['data', 'merged', 'truncated'];
-    const suggestion = issues.length > 0 && !issues.some(i => NO_AUTOFIX.includes(i)) ? suggestFix(name) : '';
-    return {
+    const suggestion = issues.length > 0 && !issues.some(ii => NO_AUTOFIX.includes(ii)) ? suggestFix(name) : '';
+
+    const entry = {
       id: i,
       original: name,
-      current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(), // normalize for display
+      current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(),
+      fName: fName,
+      lName: lName,
       issues: issues,
       details: issues.map(iss => issueDetail(iss, name)),
       suggestion: suggestion,
       accepted: false,
       dismissed: false,
     };
+
+    // Cross-field validation in CSV mode
+    if (inputMode === 'csv' && fName && lName && entry.current) {
+      const xf = crossFieldCheck(fName, lName, entry.current);
+      entry.issues.push(...xf.issues);
+      entry.details.push(...xf.details);
+    }
+
+    return entry;
   });
+
   markDuplicates(); markListContext();
   render();
   document.getElementById('resultsSection').style.display = '';
@@ -561,6 +694,14 @@ function issueDetail(issueType, name) {
       return 'Possible two people in one entry (contains "&" or "and")';
     case 'truncated':
       return 'Name may be truncated (' + clean.length + ' chars, ends abruptly)';
+    case 'xfield_missing':
+      return detail || 'First or last name missing from full name';
+    case 'xfield_mismatch':
+      return detail || 'Full name doesn\'t match first/last name fields';
+    case 'xfield_swapped':
+      return detail || 'First and last name fields appear swapped';
+    case 'xfield_extra':
+      return detail || 'Full name has additional parts not in first/last fields';
     default: return '';
   }
 }
@@ -1078,8 +1219,31 @@ function render() {
   filterHTML += `<button class="filter-btn ${activeFilter==='clean'?'active':''}" onclick="setFilter('clean')">Clean (${total - withIssues})</button>`;
   document.getElementById('filterBar').innerHTML = filterHTML;
 
+  // Update table header based on mode
+  const thead = document.getElementById('resultsHead');
+  if (inputMode === 'csv') {
+    thead.innerHTML = `<tr>
+      <th style="width:12%">F_Name</th>
+      <th style="width:12%">L_Name</th>
+      <th style="width:18%">Full Name</th>
+      <th style="width:22%">Issues</th>
+      <th style="width:16%">Suggested Fix</th>
+      <th style="width:14%">Actions</th>
+      <th style="width:6%">Score</th>
+    </tr>`;
+  } else {
+    thead.innerHTML = `<tr>
+      <th style="width:24%">Name</th>
+      <th style="width:26%">Issues</th>
+      <th style="width:22%">Suggested Fix</th>
+      <th style="width:21%">Actions</th>
+      <th style="width:7%">Score</th>
+    </tr>`;
+  }
+
+  const colSpan = inputMode === 'csv' ? 7 : 5;
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No names match the current filter.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-state">No names match the current filter.</td></tr>`;
     return;
   }
 
@@ -1121,7 +1285,12 @@ function render() {
       actions.push(`<button onclick="dismissEntry(${e.id})">Dismiss</button>`);
     }
 
+    const csvCols = inputMode === 'csv' ? `
+      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.fName || '')}</span></td>
+      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.lName || '')}</span></td>` : '';
+
     return `<tr class="${rowClass}">
+      ${csvCols}
       <td>
         <input class="name-input" data-id="${e.id}" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
         ${e.current !== normalizeDisplay(e.original) ? `<div class="original-name">was: ${esc(normalizeDisplay(e.original))}</div>` : ''}
@@ -1204,7 +1373,7 @@ function acceptAllSuggestions() {
 }
 
 // Helper: strip list-context issues (duplicates, cross-ref) and their details
-const CONTEXT_ISSUES = new Set(['duplicate','neardupe','listformat','listswapped']);
+const CONTEXT_ISSUES = new Set(['duplicate','neardupe','listformat','listswapped','xfield_missing','xfield_mismatch','xfield_swapped','xfield_extra']);
 function stripContextIssues() {
   entries.forEach(e => {
     const keep = [];
@@ -1304,6 +1473,22 @@ function download(content, filename, mime) {
 // ========== SAMPLE DATA ==========
 
 function loadSample() {
+  if (inputMode === 'csv') {
+    document.getElementById('nameInput').value = `F_Name,L_Name,user_full_name
+John,Smith,John Smith
+Jane,Doe,Jane Marie Doe
+Smith,John,John Smith
+Robert,Johnson,Bob Johnson
+Maria,Garcia,MARIA GARCIA
+michael,brown,michael brown
+Emily,Chen,Emily Wong Chen
+Wong,Wei,Wei Wong
+Sarah,,Sarah O'Connor
+,Williams,James Williams
+David,Lee,David Andrew Lee Jr.
+Alejandro,Torres,torres alejandro`;
+    return;
+  }
   document.getElementById('nameInput').value = `John Smith
 Emily Chen
 Sarah O'Connor
