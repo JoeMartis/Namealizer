@@ -693,8 +693,10 @@ function detectIssues(name) {
   }
 
   // Titles/honorifics that shouldn't be in a name list
-  const TITLES = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.?$/i;
-  if (tokens.length >= 2 && TITLES.test(tokens[0].replace(/\./g, ''))) {
+  // Titles/honorifics — require period (Hon. not Hon, Dr. not Dr) to avoid
+  // false positives on given names like Hon, Mai, Sir
+  const TITLES = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.$/i;
+  if (tokens.length >= 2 && TITLES.test(tokens[0])) {
     issues.push('title');
   }
 
@@ -891,7 +893,7 @@ function suggestFix(name) {
   fixed = fixed.replace(/^"|"$/g, '').replace(/\t/g, ' ');
 
   // Strip titles/honorifics
-  const TITLE_RE = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.?\s+/i;
+  const TITLE_RE = /^(mr|mrs|ms|miss|dr|prof|sir|lady|rev|father|mother|fr|sr|sra|herr|frau|senor|senora|hon|judge|captain|capt|sgt|cpl|pvt|lt|col|maj|gen|adm)\.\s+/i;
   fixed = fixed.replace(TITLE_RE, '');
 
   // Handle "Last, First" format -> "First Last"
