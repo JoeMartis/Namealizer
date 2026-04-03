@@ -87,9 +87,16 @@
         CSV: F_Name, L_Name, user_full_name
       </label>
     </div>
-    <textarea id="nameInput" placeholder="Paste names here, one per line..."></textarea>
+    <div id="dropZone" style="position:relative;">
+      <textarea id="nameInput" placeholder="Paste names here, one per line..."></textarea>
+      <div id="dropOverlay" style="display:none; position:absolute; inset:0; background:rgba(79,70,229,0.08); border:2px dashed var(--primary); border-radius:6px; pointer-events:none; align-items:center; justify-content:center; font-size:1rem; color:var(--primary); font-weight:600;">Drop CSV file here</div>
+    </div>
     <div class="btn-row">
       <button class="btn-primary" onclick="analyze()">Analyze Names</button>
+      <label style="padding:0.5rem 1rem; border:1px solid var(--border); border-radius:6px; background:var(--surface); font-size:0.875rem; font-weight:500; cursor:pointer; transition:all 0.15s;">
+        Load File
+        <input type="file" accept=".csv,.txt,.tsv" onchange="loadFile(event)" style="display:none;" />
+      </label>
       <button onclick="loadSample()">Load Sample</button>
       <button onclick="clearAll()">Clear</button>
     </div>
@@ -1544,6 +1551,63 @@ function clearAll() {
   entries = [];
   document.getElementById('resultsSection').style.display = 'none';
 }
+
+// ========== FILE DROP & LOAD ==========
+
+function loadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  readFile(file);
+  event.target.value = ''; // reset so same file can be loaded again
+}
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    document.getElementById('nameInput').value = text;
+    // Auto-detect CSV mode if file has commas or tabs suggesting columns
+    const firstLine = text.split('\n')[0] || '';
+    const fieldCount = parseCSVLine(firstLine).length;
+    if (fieldCount >= 3 && inputMode !== 'csv') {
+      inputMode = 'csv';
+      document.querySelector('input[name="inputMode"][value="csv"]').checked = true;
+      setInputMode('csv');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Drag and drop
+(function() {
+  const zone = document.getElementById('dropZone');
+  const overlay = document.getElementById('dropOverlay');
+  let dragCounter = 0;
+
+  zone.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    dragCounter++;
+    overlay.style.display = 'flex';
+  });
+
+  zone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) { overlay.style.display = 'none'; dragCounter = 0; }
+  });
+
+  zone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+  });
+
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dragCounter = 0;
+    overlay.style.display = 'none';
+    const file = e.dataTransfer.files[0];
+    if (file) readFile(file);
+  });
+})();
 </script>
 </body>
 </html>
