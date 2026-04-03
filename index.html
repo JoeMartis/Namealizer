@@ -490,12 +490,16 @@ const FAMILY_FIRST_SURNAMES = new Set([
 
 function parseCSVLine(line) {
   // Handle quoted CSV fields: "Smith, Jr.",John,"John Smith, Jr."
+  // Also handles escaped quotes: "Smith""Jr" → Smith"Jr
   const fields = [];
   let current = '';
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; continue; } // escaped ""
+      inQuotes = !inQuotes; continue;
+    }
     if ((ch === ',' || ch === '\t') && !inQuotes) { fields.push(current.trim()); current = ''; continue; }
     current += ch;
   }
@@ -661,13 +665,13 @@ function issueDetail(issueType, name) {
     case 'truncated':
       return 'Name may be truncated (' + clean.length + ' chars, ends abruptly)';
     case 'xfield_missing':
-      return detail || 'First or last name missing from full name';
+      return 'First or last name missing from full name';
     case 'xfield_mismatch':
-      return detail || 'Full name doesn\'t match first/last name fields';
+      return 'Full name doesn\'t match first/last name fields';
     case 'xfield_swapped':
-      return detail || 'First and last name fields appear swapped';
+      return 'First and last name fields appear swapped';
     case 'xfield_extra':
-      return detail || 'Full name has additional parts not in first/last fields';
+      return 'Full name has additional parts not in first/last fields';
     default: return '';
   }
 }
@@ -874,7 +878,7 @@ function markDuplicates() {
   }
 
   // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow)
-  if (entries.length > 500) return;
+  if (entries.length > 300) return;
 
   for (let i = 0; i < entries.length; i++) {
     if (!active[i]) continue;
@@ -1357,21 +1361,24 @@ function exportTxt() {
 }
 
 function exportCSV() {
-  const names = sortBySurname(entries.filter(e => !e.dismissed).map(e => e.current));
-  const lines = threeColumnLayout(names);
-  // Build CSV with three columns
-  const rows = Math.ceil(names.length / 3);
-  const col1 = names.slice(0, rows);
-  const col2 = names.slice(rows, rows * 2);
-  const col3 = names.slice(rows * 2);
-  const csvRows = [];
-  for (let i = 0; i < rows; i++) {
-    const c1 = col1[i] || '';
-    const c2 = col2[i] || '';
-    const c3 = col3[i] || '';
-    csvRows.push(`"${c1.replace(/"/g,'""')}","${c2.replace(/"/g,'""')}","${c3.replace(/"/g,'""')}"`);
-  }
-  download(csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
+  const active = entries.filter(e => !e.dismissed);
+  const sorted = [...active].sort((a, b) => {
+    const sa = getSurname(a.current).toLowerCase();
+    const sb = getSurname(b.current).toLowerCase();
+    return sa.localeCompare(sb, undefined, { sensitivity: 'base' }) || a.current.localeCompare(b.current);
+  });
+  const header = 'F_Name,L_Name,user_full_name,Issues,Score';
+  const csvRows = sorted.map(e => {
+    const issueList = e.issues.map(i => ISSUE_TYPES[i]?.label || i).join('; ');
+    let topScore = 0;
+    e.issues.forEach((iss, idx) => {
+      const s = getConfidence(iss, e.details[idx] || '');
+      if (s > topScore) topScore = s;
+    });
+    const q = s => '"' + (s || '').replace(/"/g, '""') + '"';
+    return `${q(e.fName)},${q(e.lName)},${q(e.current)},${q(issueList)},${topScore || ''}`;
+  });
+  download(header + '\n' + csvRows.join('\n'), 'namealyzer-report.csv', 'text/csv');
 }
 
 function copyToClipboard(btn) {
