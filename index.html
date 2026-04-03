@@ -699,17 +699,11 @@ function detectIssues(name) {
     issues.push('merged');
   }
 
-  // Possible truncation: name ends with trailing space, or last word is
-  // suspiciously short (1-2 chars) at a common field-length boundary
-  if (trimmed.length >= 15) {
+  // Possible truncation: name has trailing whitespace in the raw input
+  // (strongly suggests it was cut off mid-entry by a field-length limit)
+  if (trimmed.length >= 10) {
     const rawTrimEnd = name.replace(/^"|"$/g, '').replace(/\t/g, ' ');
-    const trailingSpace = rawTrimEnd.length > trimmed.length && /\s$/.test(rawTrimEnd);
-    const lastWord = tokens[tokens.length - 1] || '';
-    const lastWordTiny = lastWord.replace(/[^a-zA-Z]/g, '').length <= 2
-      && !SUFFIXES.has(lastWord.toLowerCase().replace(/\./g, ''))
-      && !SINGLE_PARTICLES.has(lastWord.toLowerCase());
-    const atBoundary = [20, 25, 30, 40, 50, 60, 80, 100].includes(trimmed.length);
-    if (trailingSpace || (atBoundary && lastWordTiny && tokens.length >= 2)) {
+    if (rawTrimEnd.length > trimmed.length && /\s$/.test(rawTrimEnd) && !issues.includes('spacing')) {
       issues.push('truncated');
     }
   }
