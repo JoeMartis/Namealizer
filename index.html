@@ -13,7 +13,6 @@
     --success: #10b981;
     --tag-reversed: #fef3c7; --tag-reversed-text: #92400e;
     --tag-caps: #fce7f3; --tag-caps-text: #9d174d;
-    --tag-spacing: #e0e7ff; --tag-spacing-text: #3730a3;
     --tag-data: #fee2e2; --tag-data-text: #991b1b;
     --tag-format: #f3e8ff; --tag-format-text: #6b21a8;
     --tag-duplicate: #ccfbf1; --tag-duplicate-text: #065f46;
@@ -51,7 +50,6 @@
   .tag { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
   .tag-reversed { background: var(--tag-reversed); color: var(--tag-reversed-text); }
   .tag-caps { background: var(--tag-caps); color: var(--tag-caps-text); }
-  .tag-spacing { background: var(--tag-spacing); color: var(--tag-spacing-text); }
   .tag-data { background: var(--tag-data); color: var(--tag-data-text); }
   .tag-format { background: var(--tag-format); color: var(--tag-format-text); }
   .tag-duplicate { background: var(--tag-duplicate); color: var(--tag-duplicate-text); }
@@ -131,7 +129,6 @@
 <script>
 let entries = [];
 let activeFilter = 'all';
-const inputMode = 'csv';
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -805,7 +802,7 @@ function detectIssues(name) {
   }
 
   // Merged entries: two people in one field
-  if (/\s(&|and|\/)\s/i.test(trimmed) || /&/.test(trimmed)) {
+  if (/(&|\band\b)/i.test(trimmed)) {
     issues.push('merged');
   }
 
@@ -1189,8 +1186,7 @@ function render() {
     const rowClass = hasIssues ? '' : 'row-clean';
 
     const tags = e.issues.map((iss, idx) => {
-      const info = ISSUE_TYPES[iss];
-      if (!info) return '';
+      const info = ISSUE_TYPES[iss] || { label: iss, cls: 'tag-data' };
       const detail = e.details[idx] || '';
       return `<div><span class="tag ${info.cls}">${info.label}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
     }).filter(Boolean).join('');
