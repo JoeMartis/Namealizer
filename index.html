@@ -1270,7 +1270,6 @@ function exportCSV() {
   const names = sortBySurname(entries.filter(e => !e.dismissed).map(e => e.current));
   const lines = threeColumnLayout(names);
   // Build CSV with three columns
-  const header = 'Column 1,Column 2,Column 3';
   const rows = Math.ceil(names.length / 3);
   const col1 = names.slice(0, rows);
   const col2 = names.slice(rows, rows * 2);
@@ -1282,7 +1281,7 @@ function exportCSV() {
     const c3 = col3[i] || '';
     csvRows.push(`"${c1.replace(/"/g,'""')}","${c2.replace(/"/g,'""')}","${c3.replace(/"/g,'""')}"`);
   }
-  download(header + '\n' + csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
+  download(csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
 }
 
 function copyToClipboard(btn) {
