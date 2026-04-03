@@ -64,13 +64,9 @@
   .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
   .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
-  .conf-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-  .conf-high { background: #fee2e2; color: #991b1b; }
-  .conf-medium { background: #fef3c7; color: #92400e; }
-  .conf-low { background: #f3f4f6; color: #6b7280; }
-  .conf-cell { text-align: center; }
+  .conf-cell { text-align: center; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   @media (max-width: 768px) {
-    .results-table th:nth-child(4), .results-table td:nth-child(4) { display: none; }
+    .results-table th:nth-child(5), .results-table td:nth-child(5) { display: none; }
     .results-table th:nth-child(3), .results-table td:nth-child(3) { display: none; }
   }
 </style>
@@ -97,7 +93,7 @@
       <div class="filter-bar" id="filterBar"></div>
       <div style="margin-bottom:0.75rem;">
         <label style="font-size:0.82rem; color:var(--text-muted); cursor:pointer; user-select:none;">
-          <input type="checkbox" id="ignoreSpacing" onchange="toggleIgnoreSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
+          <input type="checkbox" id="ignoreSpacing" checked onchange="toggleIgnoreSpacing()" style="margin-right:0.3rem; vertical-align:middle;" />
           Ignore whitespace/tab issues
         </label>
       </div>
@@ -106,9 +102,9 @@
           <thead><tr>
             <th style="width:24%">Name</th>
             <th style="width:26%">Issues</th>
-            <th style="width:7%">Conf.</th>
             <th style="width:22%">Suggested Fix</th>
             <th style="width:21%">Actions</th>
+            <th style="width:7%">Score</th>
           </tr></thead>
           <tbody id="resultsBody"></tbody>
         </table>
@@ -129,7 +125,7 @@
 <script>
 let entries = [];
 let activeFilter = 'all';
-let ignoreSpacing = false;
+let ignoreSpacing = true;
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -148,42 +144,50 @@ const ISSUE_TYPES = {
 
 // Per-issue confidence can be overridden by detection logic
 // high = almost certainly an error, medium = likely, low = review recommended
+// Returns a confidence score from 1 (low) to 10 (certain error)
 function getConfidence(issueType, detail) {
-  // Override defaults based on specifics
   if (issueType === 'data') {
-    if (detail && detail.includes('Placeholder')) return 'high';
-    if (detail && detail.includes('Repeated name part')) return 'medium';
-    if (detail && detail.includes('numbers')) return 'high';
-    return 'high';
+    if (detail && detail.includes('Placeholder')) return 10;
+    if (detail && detail.includes('invisible')) return 9;
+    if (detail && detail.includes('formula')) return 9;
+    if (detail && detail.includes('Concatenated')) return 8;
+    if (detail && detail.includes('numbers')) return 8;
+    if (detail && detail.includes('Repeated name part')) return 6;
+    return 8;
   }
   if (issueType === 'caps') {
-    if (detail && detail.includes('ALL CAPS')) return 'high';
-    if (detail && detail.includes('all lowercase')) return 'high';
-    if (detail && detail.includes('Inverted')) return 'high';
-    if (detail && detail.includes('Uncapitalized')) return 'medium';
-    return 'medium';
+    if (detail && detail.includes('ALL CAPS')) return 9;
+    if (detail && detail.includes('all lowercase')) return 9;
+    if (detail && detail.includes('Inverted')) return 9;
+    if (detail && detail.includes('Uncapitalized')) return 6;
+    return 6;
   }
   if (issueType === 'reversed') {
-    if (detail && detail.includes('Last, First')) return 'high';
-    if (detail && detail.includes('family-name-first')) return 'low';
-    return 'medium';
+    if (detail && detail.includes('Last, First')) return 8;
+    if (detail && detail.includes('family-name-first')) return 3;
+    return 5;
   }
   if (issueType === 'spacing') {
-    if (detail && detail.includes('tab')) return 'high';
-    if (detail && detail.includes('quotes')) return 'high';
-    return 'high';
+    if (detail && detail.includes('tab')) return 9;
+    if (detail && detail.includes('quotes')) return 8;
+    return 7;
   }
-  if (issueType === 'title') return 'high';
-  if (issueType === 'merged') return 'high';
-  if (issueType === 'truncated') return 'medium';
-  return ISSUE_TYPES[issueType]?.confidence || 'low';
+  if (issueType === 'duplicate') return 9;
+  if (issueType === 'neardupe') return 5;
+  if (issueType === 'title') return 8;
+  if (issueType === 'merged') return 9;
+  if (issueType === 'truncated') return 5;
+  if (issueType === 'initial') return 3;
+  if (issueType === 'spelling') return 3;
+  if (issueType === 'format') return 2;
+  return 3;
 }
 
-const CONFIDENCE_LABELS = {
-  high:   { text: 'High', color: '#dc2626' },
-  medium: { text: 'Med', color: '#f59e0b' },
-  low:    { text: 'Low', color: '#6b7280' },
-};
+function scoreColor(score) {
+  if (score >= 8) return '#dc2626';
+  if (score >= 5) return '#f59e0b';
+  return '#6b7280';
+}
 
 // Single-word particles for quick lookup
 const SINGLE_PARTICLES = new Set([
@@ -1019,19 +1023,17 @@ function render() {
       return `<div><span class="tag ${info.cls}">${info.label}</span>${detail ? `<div class="issue-detail">${esc(detail)}</div>` : ''}</div>`;
     }).filter(Boolean).join('');
 
-    // Compute highest confidence across visible issues for this row
-    const CONF_RANK = { high: 3, medium: 2, low: 1 };
-    let topConf = '';
+    // Compute highest confidence score across visible issues for this row
+    let topScore = 0;
     if (hasIssues) {
-      let maxRank = 0;
       e.issues.forEach((iss, idx) => {
         if (ignoreSpacing && iss === 'spacing') return;
-        const c = getConfidence(iss, e.details[idx] || '');
-        if (CONF_RANK[c] > maxRank) { maxRank = CONF_RANK[c]; topConf = c; }
+        const s = getConfidence(iss, e.details[idx] || '');
+        if (s > topScore) topScore = s;
       });
     }
-    const confCell = topConf
-      ? `<span class="conf-badge conf-${topConf}">${topConf}</span>`
+    const scoreCell = topScore > 0
+      ? `<span style="color:${scoreColor(topScore)}">${topScore}</span>`
       : '';
 
     const suggestion = e.suggestion && !e.accepted
@@ -1052,9 +1054,9 @@ function render() {
         ${e.current !== normalizeDisplay(e.original) ? `<div class="original-name">was: ${esc(normalizeDisplay(e.original))}</div>` : ''}
       </td>
       <td><div class="tags">${tags || '<span style="color:var(--success)">Clean</span>'}</div></td>
-      <td class="conf-cell">${confCell}</td>
       <td>${suggestion}</td>
       <td><div class="action-btns">${actions.join('')}</div></td>
+      <td class="conf-cell">${scoreCell}</td>
     </tr>`;
   }).join('');
 
