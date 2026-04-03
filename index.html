@@ -1361,24 +1361,19 @@ function exportTxt() {
 }
 
 function exportCSV() {
-  const active = entries.filter(e => !e.dismissed);
-  const sorted = [...active].sort((a, b) => {
-    const sa = getSurname(a.current).toLowerCase();
-    const sb = getSurname(b.current).toLowerCase();
-    return sa.localeCompare(sb, undefined, { sensitivity: 'base' }) || a.current.localeCompare(b.current);
-  });
-  const header = 'F_Name,L_Name,user_full_name,Issues,Score';
-  const csvRows = sorted.map(e => {
-    const issueList = e.issues.map(i => ISSUE_TYPES[i]?.label || i).join('; ');
-    let topScore = 0;
-    e.issues.forEach((iss, idx) => {
-      const s = getConfidence(iss, e.details[idx] || '');
-      if (s > topScore) topScore = s;
-    });
-    const q = s => '"' + (s || '').replace(/"/g, '""') + '"';
-    return `${q(e.fName)},${q(e.lName)},${q(e.current)},${q(issueList)},${topScore || ''}`;
-  });
-  download(header + '\n' + csvRows.join('\n'), 'namealyzer-report.csv', 'text/csv');
+  const names = sortBySurname(entries.filter(e => !e.dismissed).map(e => e.current));
+  const rows = Math.ceil(names.length / 3);
+  const col1 = names.slice(0, rows);
+  const col2 = names.slice(rows, rows * 2);
+  const col3 = names.slice(rows * 2);
+  const csvRows = [];
+  for (let i = 0; i < rows; i++) {
+    const c1 = col1[i] || '';
+    const c2 = col2[i] || '';
+    const c3 = col3[i] || '';
+    csvRows.push(`"${c1.replace(/"/g,'""')}","${c2.replace(/"/g,'""')}","${c3.replace(/"/g,'""')}"`);
+  }
+  download(csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
 }
 
 function copyToClipboard(btn) {
