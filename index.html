@@ -59,8 +59,10 @@
   .tag-spelling { background: var(--tag-spelling); color: var(--tag-spelling-text); }
   .action-btns { display: flex; gap: 0.3rem; }
   .action-btns button { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
-  .filter-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-  .filter-btn { padding: 0.25rem 0.6rem; font-size: 0.78rem; border-radius: 20px; }
+  .filter-bar { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: center; }
+  .filter-bar .sep { width: 1px; height: 1.2rem; background: var(--border); margin: 0 0.25rem; }
+  .filter-btn { padding: 0.15rem 0.5rem; font-size: 0.72rem; border-radius: 20px; white-space: nowrap; }
+  .filter-btn .count { opacity: 0.7; }
   .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
   .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
@@ -1157,14 +1159,17 @@ function render() {
     e.issues.forEach(iss => { issueCounts[iss] = (issueCounts[iss] || 0) + 1; });
   });
 
-  let filterHTML = `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All (${total})</button>`;
-  filterHTML += `<button class="filter-btn ${activeFilter==='issues'?'active':''}" onclick="setFilter('issues')">Has Issues (${withIssues})</button>`;
-  for (const [key, info] of Object.entries(ISSUE_TYPES)) {
-    if (issueCounts[key]) {
-      filterHTML += `<button class="filter-btn ${activeFilter===key?'active':''}" onclick="setFilter('${key}')">${info.label} (${issueCounts[key]})</button>`;
+  let filterHTML = `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All <span class="count">${total}</span></button>`;
+  filterHTML += `<button class="filter-btn ${activeFilter==='issues'?'active':''}" onclick="setFilter('issues')">Issues <span class="count">${withIssues}</span></button>`;
+  filterHTML += `<button class="filter-btn ${activeFilter==='clean'?'active':''}" onclick="setFilter('clean')">Clean <span class="count">${total - withIssues}</span></button>`;
+  // Add separator and per-issue filters
+  const issueKeys = Object.entries(ISSUE_TYPES).filter(([k]) => issueCounts[k]);
+  if (issueKeys.length > 0) {
+    filterHTML += `<div class="sep"></div>`;
+    for (const [key, info] of issueKeys) {
+      filterHTML += `<button class="filter-btn ${activeFilter===key?'active':''}" onclick="setFilter('${key}')">${info.label} <span class="count">${issueCounts[key]}</span></button>`;
     }
   }
-  filterHTML += `<button class="filter-btn ${activeFilter==='clean'?'active':''}" onclick="setFilter('clean')">Clean (${total - withIssues})</button>`;
   document.getElementById('filterBar').innerHTML = filterHTML;
 
   const colSpan = 7;
