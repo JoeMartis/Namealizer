@@ -77,18 +77,12 @@
   <p class="subtitle">Paste a list of names to detect formatting issues, duplicates, and data entry errors.</p>
   <div class="card">
     <h2>Input Names</h2>
-    <div style="margin-bottom:0.75rem; display:flex; gap:1.5rem; font-size:0.85rem;">
-      <label style="cursor:pointer;">
-        <input type="radio" name="inputMode" value="list" checked onchange="setInputMode('list')" style="margin-right:0.3rem;" />
-        Plain list (one name per line)
-      </label>
-      <label style="cursor:pointer;">
-        <input type="radio" name="inputMode" value="csv" onchange="setInputMode('csv')" style="margin-right:0.3rem;" />
-        CSV: F_Name, L_Name, user_full_name
-      </label>
+    <div id="modeIndicator" style="margin-bottom:0.5rem; font-size:0.82rem; color:var(--text-muted); display:none;">
+      <span id="modeText"></span>
+      <button onclick="resetMode()" style="padding:0.1rem 0.4rem; font-size:0.75rem; margin-left:0.5rem; border-radius:4px;">Switch to plain list</button>
     </div>
     <div id="dropZone" style="position:relative;">
-      <textarea id="nameInput" placeholder="Paste names here, one per line..."></textarea>
+      <textarea id="nameInput" placeholder="Paste names (one per line) or CSV data (F_Name, L_Name, user_full_name)&#10;&#10;You can also drag and drop a .csv file here"></textarea>
       <div id="dropOverlay" style="display:none; position:absolute; inset:0; background:rgba(79,70,229,0.08); border:2px dashed var(--primary); border-radius:6px; pointer-events:none; align-items:center; justify-content:center; font-size:1rem; color:var(--primary); font-weight:600;">Drop CSV file here</div>
     </div>
     <div class="btn-row">
@@ -509,12 +503,28 @@ const FAMILY_FIRST_SURNAMES = new Set([
 
 function setInputMode(mode) {
   inputMode = mode;
-  const ta = document.getElementById('nameInput');
+  const indicator = document.getElementById('modeIndicator');
+  const modeText = document.getElementById('modeText');
   if (mode === 'csv') {
-    ta.placeholder = 'Paste CSV data: F_Name, L_Name, user_full_name (one record per line)\n\nExample:\nJohn,Smith,John Smith\nJane,Doe,Jane Marie Doe';
+    indicator.style.display = '';
+    modeText.textContent = 'CSV mode detected (F_Name, L_Name, user_full_name)';
   } else {
-    ta.placeholder = 'Paste names here, one per line...';
+    indicator.style.display = 'none';
   }
+}
+
+function resetMode() {
+  inputMode = 'list';
+  document.getElementById('modeIndicator').style.display = 'none';
+}
+
+function autoDetectMode(text) {
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  if (lines.length < 1) return 'list';
+  // Check first few non-empty lines for 3+ fields
+  const sampled = lines.slice(0, Math.min(5, lines.length));
+  const csvCount = sampled.filter(l => parseCSVLine(l).length >= 3).length;
+  return csvCount >= sampled.length * 0.6 ? 'csv' : 'list';
 }
 
 function parseCSVLine(line) {
@@ -589,6 +599,10 @@ function crossFieldCheck(fName, lName, fullName) {
 function analyze() {
   const raw = document.getElementById('nameInput').value;
   if (!raw.trim()) return;
+
+  // Auto-detect CSV vs plain list
+  const detected = autoDetectMode(raw);
+  if (detected !== inputMode) setInputMode(detected);
 
   const lines = raw.split('\n').filter(l => l.trim().length > 0);
 
@@ -1566,14 +1580,9 @@ function readFile(file) {
   reader.onload = function(e) {
     const text = e.target.result;
     document.getElementById('nameInput').value = text;
-    // Auto-detect CSV mode if file has commas or tabs suggesting columns
-    const firstLine = text.split('\n')[0] || '';
-    const fieldCount = parseCSVLine(firstLine).length;
-    if (fieldCount >= 3 && inputMode !== 'csv') {
-      inputMode = 'csv';
-      document.querySelector('input[name="inputMode"][value="csv"]').checked = true;
-      setInputMode('csv');
-    }
+    // Auto-detect mode from file content
+    const detected = autoDetectMode(text);
+    setInputMode(detected);
   };
   reader.readAsText(file);
 }
