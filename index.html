@@ -74,15 +74,11 @@
 <body>
 <div class="container">
   <h1>Namealizer</h1>
-  <p class="subtitle">Paste a list of names to detect formatting issues, duplicates, and data entry errors.</p>
+  <p class="subtitle">Paste or drop a CSV with F_Name, L_Name, and user_full_name columns to detect formatting issues and data entry errors.</p>
   <div class="card">
     <h2>Input Names</h2>
-    <div id="modeIndicator" style="margin-bottom:0.5rem; font-size:0.82rem; color:var(--text-muted); display:none;">
-      <span id="modeText"></span>
-      <button onclick="resetMode()" style="padding:0.1rem 0.4rem; font-size:0.75rem; margin-left:0.5rem; border-radius:4px;">Switch to plain list</button>
-    </div>
     <div id="dropZone" style="position:relative;">
-      <textarea id="nameInput" placeholder="Paste names (one per line) or CSV data (F_Name, L_Name, user_full_name)&#10;&#10;You can also drag and drop a .csv file here"></textarea>
+      <textarea id="nameInput" placeholder="Paste CSV data: F_Name, L_Name, user_full_name&#10;&#10;John,Smith,John Smith&#10;Jane,Doe,Jane Marie Doe&#10;&#10;Or drag and drop a .csv file here"></textarea>
       <div id="dropOverlay" style="display:none; position:absolute; inset:0; background:rgba(79,70,229,0.08); border:2px dashed var(--primary); border-radius:6px; pointer-events:none; align-items:center; justify-content:center; font-size:1rem; color:var(--primary); font-weight:600;">Drop CSV file here</div>
     </div>
     <div class="btn-row">
@@ -110,12 +106,14 @@
       </div>
       <div style="overflow-x:auto;">
         <table class="results-table">
-          <thead id="resultsHead"><tr>
-            <th style="width:24%">Name</th>
-            <th style="width:26%">Issues</th>
-            <th style="width:22%">Suggested Fix</th>
-            <th style="width:21%">Actions</th>
-            <th style="width:7%">Score</th>
+          <thead><tr>
+            <th style="width:12%">F_Name</th>
+            <th style="width:12%">L_Name</th>
+            <th style="width:18%">Full Name</th>
+            <th style="width:22%">Issues</th>
+            <th style="width:16%">Suggested Fix</th>
+            <th style="width:14%">Actions</th>
+            <th style="width:6%">Score</th>
           </tr></thead>
           <tbody id="resultsBody"></tbody>
         </table>
@@ -137,7 +135,7 @@
 let entries = [];
 let activeFilter = 'all';
 let ignoreSpacing = true;
-let inputMode = 'list'; // 'list' or 'csv'
+const inputMode = 'csv';
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -501,32 +499,6 @@ const FAMILY_FIRST_SURNAMES = new Set([
 
 // ========== DETECTION ENGINE ==========
 
-function setInputMode(mode) {
-  inputMode = mode;
-  const indicator = document.getElementById('modeIndicator');
-  const modeText = document.getElementById('modeText');
-  if (mode === 'csv') {
-    indicator.style.display = '';
-    modeText.textContent = 'CSV mode detected (F_Name, L_Name, user_full_name)';
-  } else {
-    indicator.style.display = 'none';
-  }
-}
-
-function resetMode() {
-  inputMode = 'list';
-  document.getElementById('modeIndicator').style.display = 'none';
-}
-
-function autoDetectMode(text) {
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
-  if (lines.length < 1) return 'list';
-  // Check first few non-empty lines for 3+ fields
-  const sampled = lines.slice(0, Math.min(5, lines.length));
-  const csvCount = sampled.filter(l => parseCSVLine(l).length >= 3).length;
-  return csvCount >= sampled.length * 0.6 ? 'csv' : 'list';
-}
-
 function parseCSVLine(line) {
   // Handle quoted CSV fields: "Smith, Jr.",John,"John Smith, Jr."
   const fields = [];
@@ -600,15 +572,11 @@ function analyze() {
   const raw = document.getElementById('nameInput').value;
   if (!raw.trim()) return;
 
-  // Auto-detect CSV vs plain list
-  const detected = autoDetectMode(raw);
-  if (detected !== inputMode) setInputMode(detected);
-
   const lines = raw.split('\n').filter(l => l.trim().length > 0);
 
   // Skip header row if it looks like one
   let startIdx = 0;
-  if (inputMode === 'csv' && lines.length > 1) {
+  if (lines.length > 1) {
     const firstFields = parseCSVLine(lines[0]);
     const headerish = firstFields.some(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, '')));
     if (headerish) startIdx = 1;
@@ -617,16 +585,10 @@ function analyze() {
   const dataLines = lines.slice(startIdx);
 
   entries = dataLines.map((line, i) => {
-    let name, fName = '', lName = '';
-
-    if (inputMode === 'csv') {
-      const fields = parseCSVLine(line);
-      fName = (fields[0] || '').trim();
-      lName = (fields[1] || '').trim();
-      name = (fields[2] || '').trim() || (fName + ' ' + lName).trim(); // fallback to concat
-    } else {
-      name = line;
-    }
+    const fields = parseCSVLine(line);
+    const fName = (fields[0] || '').trim();
+    const lName = (fields[1] || '').trim();
+    const name = (fields[2] || '').trim() || (fName + ' ' + lName).trim(); // fallback to concat
 
     const issues = detectIssues(name);
     const NO_AUTOFIX = ['data', 'merged', 'truncated'];
@@ -645,8 +607,8 @@ function analyze() {
       dismissed: false,
     };
 
-    // Cross-field validation in CSV mode
-    if (inputMode === 'csv' && fName && lName && entry.current) {
+    // Cross-field validation
+    if (fName && lName && entry.current) {
       const xf = crossFieldCheck(fName, lName, entry.current);
       entry.issues.push(...xf.issues);
       entry.details.push(...xf.details);
@@ -1240,29 +1202,7 @@ function render() {
   filterHTML += `<button class="filter-btn ${activeFilter==='clean'?'active':''}" onclick="setFilter('clean')">Clean (${total - withIssues})</button>`;
   document.getElementById('filterBar').innerHTML = filterHTML;
 
-  // Update table header based on mode
-  const thead = document.getElementById('resultsHead');
-  if (inputMode === 'csv') {
-    thead.innerHTML = `<tr>
-      <th style="width:12%">F_Name</th>
-      <th style="width:12%">L_Name</th>
-      <th style="width:18%">Full Name</th>
-      <th style="width:22%">Issues</th>
-      <th style="width:16%">Suggested Fix</th>
-      <th style="width:14%">Actions</th>
-      <th style="width:6%">Score</th>
-    </tr>`;
-  } else {
-    thead.innerHTML = `<tr>
-      <th style="width:24%">Name</th>
-      <th style="width:26%">Issues</th>
-      <th style="width:22%">Suggested Fix</th>
-      <th style="width:21%">Actions</th>
-      <th style="width:7%">Score</th>
-    </tr>`;
-  }
-
-  const colSpan = inputMode === 'csv' ? 7 : 5;
+  const colSpan = 7;
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-state">No names match the current filter.</td></tr>`;
     return;
@@ -1306,12 +1246,9 @@ function render() {
       actions.push(`<button onclick="dismissEntry(${e.id})">Dismiss</button>`);
     }
 
-    const csvCols = inputMode === 'csv' ? `
-      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.fName || '')}</span></td>
-      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.lName || '')}</span></td>` : '';
-
     return `<tr class="${rowClass}">
-      ${csvCols}
+      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.fName || '')}</span></td>
+      <td><span style="font-size:0.85rem;color:var(--text-muted)">${esc(e.lName || '')}</span></td>
       <td>
         <input class="name-input" data-id="${e.id}" value="${esc(e.current)}" onchange="updateName(${e.id}, this.value)" />
         ${e.current !== normalizeDisplay(e.original) ? `<div class="original-name">was: ${esc(normalizeDisplay(e.original))}</div>` : ''}
@@ -1494,8 +1431,7 @@ function download(content, filename, mime) {
 // ========== SAMPLE DATA ==========
 
 function loadSample() {
-  if (inputMode === 'csv') {
-    document.getElementById('nameInput').value = `F_Name,L_Name,user_full_name
+  document.getElementById('nameInput').value = `F_Name,L_Name,user_full_name
 John,Smith,John Smith
 Jane,Doe,Jane Marie Doe
 Smith,John,John Smith
@@ -1507,57 +1443,13 @@ Wong,Wei,Wei Wong
 Sarah,,Sarah O'Connor
 ,Williams,James Williams
 David,Lee,David Andrew Lee Jr.
-Alejandro,Torres,torres alejandro`;
-    return;
-  }
-  document.getElementById('nameInput').value = `John Smith
-Emily Chen
-Sarah O'Connor
-Smith John
-Johnson Michael
-JANE DOE
-jane doe
-jOHN sMITH
-Jane   Doe
-Jane	Doe
-O'Brien, Mary
-Williams, James
-robert42 jones
-J@ne D0e
-Maria  Elena   Santos
-GARCIA Maria
-maria garcia
-Maria Garcia
-Santiago de la Cruz
-Jean-Pierre Dubois
-McDonald Sarah
- David   Lee
-thompson robert
-Anna-Lise van der Berg
-Reginald P Worthington III
-N Ramirez
-A Kim
-test
-NULL
-Kim Minho
-Nguyen Thi Lan
-Tanaka Haruto
-Park Jisoo
-Wang Xiaoming
-Patel Arjun
-Suzuki Yuki
-Nagy Istvan
-Sharma Priya
-Tran Duc Minh
-Micheal Johnson
-Michael Johnson
-Roberto Sanchez
-Roberta Sanchez
-Dr. James Wilson
-Mr. Robert Taylor
-John & Mary Smith
-R.K.
-J.S.M.`;
+Alejandro,Torres,torres alejandro
+Kim,Minho,Kim Minho
+Jean-Pierre,Dubois,Jean-Pierre Dubois
+Patel,Arjun,Patel Arjun
+roberto42,jones,roberto42 jones
+Dr.,Wilson,Dr. James Wilson
+John,Smith,John & Mary Smith`;
 }
 
 function clearAll() {
@@ -1580,9 +1472,6 @@ function readFile(file) {
   reader.onload = function(e) {
     const text = e.target.result;
     document.getElementById('nameInput').value = text;
-    // Auto-detect mode from file content
-    const detected = autoDetectMode(text);
-    setInputMode(detected);
   };
   reader.readAsText(file);
 }
