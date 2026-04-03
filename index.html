@@ -242,13 +242,28 @@ const COMMON_FIRST = new Set([
   'mohamed','ahmed','ali','omar','fatima','hassan','ibrahim','youssef','mustafa','khalid',
   'tariq','rashid','nour','layla','amira','salma','zainab','aisha','hana','rania',
   'abdallah','karim','samir','nadia','mariam','yusuf','hamza','bilal','sami','mona',
-  // East Asian given names
+  // Chinese given names (romanized)
   'wei','min','jun','yan','lei','jing','fang','xia','hong','ping','ling','mei','yun',
   'xiaoming','xiaohua','jianjun','guoqiang','shuying','lili','xiaoli','minghui','haoran',
+  'yuxuan','zihan','haoyu','jiayi','yichen','zimo','yinuo','xinyi','ruoxi','siyu',
+  'chenxi','zitong','yufei','tianyu','bowen','junhao','zijun','yuxin','zeyu','haochen',
+  'wenxuan','yiming','jiahao','ziyi','xinyue','mengqi','ruiqi','qianyu','yuqi','hanyu',
+  'cheng','qiang','hua','tao','peng','bo','hao','nan','yu','yi','xin','hui','lin',
+  // Japanese given names
   'hiroshi','yuki','kenji','takeshi','aki','haruto','yuto','sota','riku','hinata','sakura',
   'aoi','hana','yui','mio','ren','kaito','sora','minato','akari','koharu',
+  'arata','sho','ryu','ken','makoto','yuma','hayato','daiki','kenta','ryota',
+  'mei','hina','yua','rio','misaki','nanami','shiori','ayaka','natsuki','momoka',
+  'takuya','shota','naoki','tatsuya','keita','daisuke','ryusei','kazuki','tomoya','yusuke',
+  // Korean given names
   'minho','jisoo','hyun','soomin','jiwon','eunji','seoyeon','yuna','jihye','donghyun',
+  'jihoon','seungmin','hyunjin','yeji','chaeyoung','taehyung','jungkook','sunghoon','soojin',
+  'minji','yeonjun','sungho','jaehyun','dohyun','hajin','subin','nayeon','dahyun','woojin',
+  'seojin','yoonho','kyungmin','haneul','jimin','siwoo','eunbi','hyejin','sangwoo','junghwa',
+  // Vietnamese given names
   'minh','thi','van','duc','huong','linh','hoa','thanh','tuan','nam','anh','nga','lan',
+  'quang','dung','huy','phuong','thao','trung','cuong','hung','long','hai','son','dat',
+  'ngoc','trang','thuy','mai','yen','chi','nhat','tam','vinh','khoa','bao','khanh',
   // South Asian (Indian, Pakistani, Bangladeshi, Sri Lankan)
   'kumar','priya','deepak','anand','sanjay','raj','amit','rahul','suresh','vikram',
   'arjun','arun','ravi','pooja','neha','sunita','rekha','anita','kavita','meera',
@@ -313,13 +328,24 @@ const COMMON_LAST = new Set([
   'bajaj','ahuja','bhatia','dhawan','kohli','anand','khanna','arora','luthra','oberoi',
   'chaudhary','shukla','dubey','dixit','srivastava','awasthi','rastogi','nigam','mathur','tandon',
   'husain','ansari','siddiqui','rizvi','mirza','qureshi','hashmi','jafri','bukhari','farooqui',
-  // East Asian
+  // Chinese surnames
   'wang','chen','li','zhang','liu','yang','huang','zhao','wu','zhou','xu','sun','ma',
   'zhu','hu','guo','lin','he','gao','luo','zheng','liang','xie','tang','deng','feng',
+  'han','cao','peng','zeng','xiao','tian','dong','pan','yuan','yu','jiang','cai','jia','ding',
+  'ye','lu','wei','ren','yao','shao','qian','dai','fan','fang','shi','xiong','jin','qiu',
+  'bai','zou','kong','cui','kang','mao','wan','gu','lai','hao','gong','cheng','shao',
+  // Korean surnames
   'kim','park','choi','cho','yoon','kang','jung','lim','han','song','shin','kwon','hwang',
+  'ahn','yoo','seo','moon','bae','jang','ryu','oh','byun','noh','ha','ko','woo',
+  'nam','sim','hong','yun','jeon','min','ji','eom','won','cheon','yang','pyo','gi',
+  // Vietnamese surnames
   'nguyen','tran','le','pham','hoang','vo','dang','bui','do','ngo','duong','ly',
+  'ha','doan','vuong','mai','huynh','dinh','dam','trinh','luu','tong','vu','cao','ta',
+  // Japanese surnames
   'tanaka','suzuki','sato','takahashi','watanabe','ito','yamamoto','nakamura','kobayashi',
   'yoshida','yamada','sasaki','yamaguchi','matsumoto','inoue','kimura','hayashi','shimizu',
+  'saito','kato','ikeda','mori','hashimoto','abe','ishida','ogawa','yamazaki','goto',
+  'hasegawa','okada','murakami','kondo','ishikawa','maeda','fujita','nishimura','aoki','endo',
   // Arabic / Middle Eastern
   'al-rashid','al-hussein','al-farsi','al-sayed','mohammed','abdullah','rahman','hassan',
   'ibrahim','ismail','osman','yusuf','hamid','nasser','khoury','haddad','mansour','saleh',
@@ -340,21 +366,26 @@ const COMMON_LAST = new Set([
 // These are common surnames that, when appearing as the FIRST word, suggest
 // the name may be in Last-First order (East Asian, Hungarian, etc.)
 const FAMILY_FIRST_SURNAMES = new Set([
-  // Chinese (top ~40 surnames cover >90% of population)
+  // Chinese (top ~60 surnames cover >95% of population)
   'wang','li','zhang','liu','chen','yang','huang','zhao','wu','zhou',
   'xu','sun','ma','zhu','hu','guo','lin','he','gao','luo',
   'zheng','liang','xie','tang','deng','feng','han','cao','peng','zeng',
   'xiao','tian','dong','pan','yuan','yu','jiang','cai','jia','ding',
+  'ye','lu','wei','ren','yao','shao','qian','dai','fan','fang','shi','xiong','jin','qiu',
+  'bai','zou','kong','cui','kang','mao','wan','gu','lai','hao','gong','cheng',
   // Korean
   'kim','park','lee','choi','jung','kang','cho','yoon','jang','lim',
   'han','shin','kwon','hwang','song','ahn','yoo','seo','moon','bae',
+  'ryu','oh','byun','noh','ha','ko','woo','nam','sim','hong','yun','jeon',
   // Vietnamese
   'nguyen','tran','le','pham','hoang','vo','dang','bui','do','ngo',
-  'duong','ly','ha','doan','vuong','mai','huynh','dinh','dam',
+  'duong','ly','ha','doan','vuong','mai','huynh','dinh','dam','trinh','luu','vu','cao','ta',
   // Japanese
   'tanaka','suzuki','sato','takahashi','watanabe','ito','yamamoto','nakamura',
   'kobayashi','yoshida','yamada','sasaki','yamaguchi','matsumoto','inoue',
   'kimura','hayashi','shimizu','saito','kato','ikeda','mori','hashimoto',
+  'abe','ishida','ogawa','yamazaki','goto','hasegawa','okada','murakami','kondo',
+  'ishikawa','maeda','fujita','nishimura','aoki','endo',
   // Hungarian (family-name-first culture)
   'nagy','kovacs','toth','szabo','horvath','varga','kiss','molnar','nemeth','farkas',
 ]);
