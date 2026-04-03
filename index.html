@@ -190,7 +190,8 @@ const SINGLE_PARTICLES = new Set([
   'de','del','da','do','dos','das','du','le','la','des','di','dal',
   'della','dei','degli','delle','lo','van','het','ter','ten','von',
   'zu','zum','zur','al','el','bin','ibn','bint','abu','ap','ab',
-  'y','e','i','und','of',
+  'y','e','i','und','of','ben','ould','ait','ag','af','av','na',
+  'binti','bte','bt','um','mac','nic','ui','ni',
 ]);
 
 // Suffixes to detect and preserve
@@ -275,10 +276,39 @@ const COMMON_FIRST = new Set([
   'sneha','shruti','anjali','preeti','ritu','nisha','pallavi','shweta','ankita','tanvi',
   'pranav','harsh','krish','reyansh','kabir','ishaan','dhruv','arnav','shaurya','atharv',
   'naveen','prasad','chandra','mohan','gopal','hari','shankar','venkat','balaji','karthik',
-  // African
+  // South Indian / Bengali / Gujarati / Marathi / Punjabi
+  'selvam','murugan','senthil','anbu','lakshman','saravanan','vijay','surya','tamizh','meena',
+  'valli','revathi','padma','vasanthi','amala','sowmya','bhuvana','ramya','gayathri',
+  'subhash','debashis','partha','tapan','arijit','sourav','ritika','moumita','swapna','indrani',
+  'hetal','jignesh','mitesh','darshan','dharmesh','komal','riddhi','siddhi',
+  'sachin','sandip','tushar','gauri','sarika','vaishali',
+  'gurpreet','harpreet','jaspreet','manpreet','simran','navjot',
+  'anaya','kiara','myra','advik','sai','ritvik','avni',
+  // African (expanded)
   'kwame','kofi','ama','akua','yaw','adwoa','chidi','ngozi','obioma','amara',
   'oluwaseun','adebayo','folake','temitope','chioma','emeka','nneka','obinna','sekou',
   'fatou','ousmane','mamadou','amadou','boubacar','moussa','mariama','aissatou','abdoulaye',
+  'chinwe','adaeze','uchenna','kelechi','ifeoma','nnamdi','ugochi','chiamaka','ebuka',
+  'olayinka','babatunde','oluwatobi','titilayo','yetunde','modupe','funmilayo','ayodele','olumide',
+  'adeola','toyin','bintu','kadiatou','fatoumata','aminata','djibril','ibrahima','lamine',
+  'cheikh','adama','souleymane','binta','rokia','awa','oumou','habiba','amina','saliou',
+  // Arabic / Middle Eastern (expanded)
+  'walid','adel','fadi','mazen','rami','hisham','bassam','nabil','tamer','marwan',
+  'wael','khaled','jamal','ziad','imad','majid','nizar','anas','osama','badr',
+  'faris','munir','hatem','fouad','nasr','dina','dalal','ghada','lubna','maha',
+  'rana','sawsan','suha','wafa','yasmin','leila','lina','nisreen','noura','siham',
+  'huda','abeer','eman','lamia','samira','tahani','ihab','hazem','sharif','raed',
+  // Scandinavian / Greek / Turkish / Baltic / Balkan
+  'bjorn','sigrid','astrid','ingrid','gunnar','ragnar','freya','thorsten','sven','lars',
+  'leif','magnus','odin','ulf','ivar','solveig','gudrun','eirik',
+  'konstantinos','dimitrios','georgios','nikolaos','panagiotis','vasilis','evangelos',
+  'mehmet','ayse','elif','emre','burak','murat','cem','deniz',
+  'dragan','zoran','milica','jelena','vesna','branko',
+  // Southeast Asian
+  'somchai','siriwan','narong','anong','sombat','chatri','wanchai','niran',
+  'siti','dewi','agus','budi','wati','putri','rizal','andi','mega','bayu',
+  'maung','aung','htun','mya','khin','thida','zaw','hla',
+  'sokha','chea','bopha','dara','kunthea','pich','rith','vanna',
   // Russian / Eastern European
   'anna','elena','olga','sergei','andrei','dmitri','vladimir','nina','svetlana','tatiana',
   'alexei','mikhail','ivan','boris','yuri','pavel','oleg','viktor','natalya','ekaterina',
@@ -328,6 +358,17 @@ const COMMON_LAST = new Set([
   'bajaj','ahuja','bhatia','dhawan','kohli','anand','khanna','arora','luthra','oberoi',
   'chaudhary','shukla','dubey','dixit','srivastava','awasthi','rastogi','nigam','mathur','tandon',
   'husain','ansari','siddiqui','rizvi','mirza','qureshi','hashmi','jafri','bukhari','farooqui',
+  // South Indian / Bengali / other regional Indian
+  'krishnamurthy','subramanian','venkatesh','sundaram','natarajan','raghavan','swaminathan',
+  'ramachandran','gopalakrishnan','subrahmanyam','thiruvengadam',
+  'gangopadhyay','bhattacharya','ghosh','dutta','chakraborty','sarkar','majumdar',
+  'modi','parikh','raval','johar','panchal','dalal','thakkar',
+  'jadhav','bhosale','chavan','gaikwad','wagh',
+  'gill','sidhu','sandhu','dhillon','grewal','virdi','sheikh','malik','nawab',
+  // Sri Lankan / Nepali / Bangladeshi
+  'jayawardena','perera','wickramasinghe','ratnayake','bandara','dissanayake','senanayake',
+  'adhikari','basnet','karki','bhandari','tamang','gurung','shrestha','thapa',
+  'akter','begum','mullah',
   // Chinese surnames
   'wang','chen','li','zhang','liu','yang','huang','zhao','wu','zhou','xu','sun','ma',
   'zhu','hu','guo','lin','he','gao','luo','zheng','liang','xie','tang','deng','feng',
@@ -346,13 +387,27 @@ const COMMON_LAST = new Set([
   'yoshida','yamada','sasaki','yamaguchi','matsumoto','inoue','kimura','hayashi','shimizu',
   'saito','kato','ikeda','mori','hashimoto','abe','ishida','ogawa','yamazaki','goto',
   'hasegawa','okada','murakami','kondo','ishikawa','maeda','fujita','nishimura','aoki','endo',
-  // Arabic / Middle Eastern
+  // Arabic / Middle Eastern (expanded)
   'al-rashid','al-hussein','al-farsi','al-sayed','mohammed','abdullah','rahman','hassan',
   'ibrahim','ismail','osman','yusuf','hamid','nasser','khoury','haddad','mansour','saleh',
-  // African
+  'al-masri','al-ali','al-ahmad','al-shahrani','al-qahtani','al-dosari','al-harbi','al-ghamdi',
+  'al-otaibi','al-zahrani','al-shammari','al-mutairi','al-tamimi','al-ansari','al-bakr',
+  'al-khalil','al-sharif','al-turki','al-amiri','darwish','tabbara','bazzi','najjar',
+  // African (expanded)
   'diallo','traore','coulibaly','toure','camara','keita','kone','bah','sow','barry',
   'ndiaye','fall','diop','diouf','mbaye','sylla','okafor','obi','eze','nwosu','adeyemi',
   'ogunleye','bakare','balogun','afolabi',
+  'mensah','asante','boateng','owusu','appiah','acheampong','adjei','yeboah','frimpong','ankrah',
+  'okonkwo','okeke','ogundipe','oyewole','akindele','akinyemi','olufemi',
+  'sangare','sissoko','dembele','sacko','cisse','ouattara','doumbia',
+  // Scandinavian / Greek / Turkish / Balkan
+  'johansson','andersson','karlsson','nilsson','eriksson','larsson','olsson','persson','svensson',
+  'petersen','rasmussen','kristiansen',
+  'papadopoulos','nikolaidis','georgiou','dimitriou',
+  'yilmaz','kaya','demir','celik','ozturk','aydin','sahin',
+  'jovanovic','petrovic','nikolic','stojanovic','horvat',
+  // Filipino
+  'santos','aquino','del rosario','bautista',
   // Russian / Eastern European
   'ivanov','petrov','smirnov','kuznetsov','popov','sokolov','lebedev','kozlov','novikov',
   'morozov','volkov','alekseev','fedorov','kowalski','nowak','wisniewski','wojciechowski',
@@ -440,6 +495,9 @@ function issueDetail(issueType, name) {
       if (/\d/.test(clean)) return 'Contains numbers';
       if (PLACEHOLDERS.has(clean.toLowerCase())) return 'Placeholder entry';
       if (/\xC3[\x80-\xBF]/.test(clean)) return 'Possible encoding issue (mojibake)';
+      if (/[\u200B\u200C\u200D\uFEFF\u00AD]/.test(name)) return 'Contains invisible characters (zero-width/BOM)';
+      if (/^[=+\-@]/.test(clean)) return 'Starts with formula character (spreadsheet artifact)';
+      if (clean.split(/\s+/).some(t => /^[A-Z][a-z]+[A-Z][a-z]+$/.test(t) && t.length > 6)) return 'Possible concatenated names (no space between)';
       if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(clean)) return 'Contains special characters';
       const dParts = clean.split(/\s+/).map(p => p.replace(/[^a-zA-Z\u00C0-\u024F'-]/g, '').toLowerCase()).filter(p => p.length > 1);
       const dSeen = new Set();
@@ -457,6 +515,7 @@ function issueDetail(issueType, name) {
       }
       return 'Name parts may be reversed';
     case 'format':
+      if (/\b[SDW]\/O\b/i.test(name)) return 'Contains S/O, D/O, or W/O (formal record pattern)';
       if (/\(.*\)/.test(name)) return 'Contains parenthetical (nickname?)';
       const tparts = name.trim().split(/\s+/);
       if (tparts.some(p => p === p.toUpperCase() && p.length > 1 && /[A-Z]/.test(p)) &&
@@ -488,6 +547,12 @@ function detectIssues(name) {
   if (/\d/.test(trimmed)) issues.push('data');
   if (/[<>@#$%^&*=+{}\[\]|\\~`]/.test(trimmed)) issues.push('data');
   if (/\xC3[\x80-\xBF]/.test(trimmed)) issues.push('data'); // mojibake
+  if (/[\u200B\u200C\u200D\uFEFF\u00AD]/.test(name)) issues.push('data'); // invisible chars
+  if (/^[=+\-@]/.test(trimmed)) issues.push('data'); // spreadsheet formula injection
+  // Concatenated names: "JohnSmith" — lowercase followed by uppercase mid-word
+  if (trimmed.split(/\s+/).some(t => /^[A-Z][a-z]+[A-Z][a-z]+$/.test(t) && t.length > 6)) issues.push('data');
+  // S/O, D/O, W/O formal records
+  if (/\b[SDW]\/O\b/i.test(trimmed)) issues.push('format');
 
   // Spacing issues (tabs and quotes already detected above)
   if (name !== name.trim()) issues.push('spacing'); // leading/trailing
@@ -649,9 +714,14 @@ function editDistance(a, b) {
 }
 
 function markDuplicates() {
-  // Normalize: lowercase, strip diacritics, collapse non-alpha
+  // Normalize: lowercase, strip diacritics, European romanization, collapse non-alpha
   const normalize = s => s.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ø/g,'o').replace(/æ/g,'ae').replace(/ß/g,'ss')
+    .replace(/ð/g,'d').replace(/þ/g,'th').replace(/ł/g,'l')
+    .replace(/[''ʼ\u2019\u2018]/g, "'")
+    .replace(/[\u200B\u200C\u200D\uFEFF\u00AD]/g, '')
+    .replace(/\u00A0/g, ' ')
     .replace(/[^a-z]/g, '');
 
   const norms = entries.map(e => normalize(e.current));
