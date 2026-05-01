@@ -33,23 +33,26 @@ Jane,Doe,Jane Marie Doe
 - Handles escaped quotes: `"Smith""Jr"` → `Smith"Jr`
 - Drag-and-drop `.csv`, `.txt`, or `.tsv` files onto the textarea
 - **Load File** button as alternative to drag-and-drop
+- Missing fields are detected and flagged
 
 ---
 
 ## Detection Engine
 
-### Cross-Field Validation (CSV-specific)
+Namealyzer runs **18 issue types** across three layers of analysis:
+
+### Layer 1: Cross-Field Validation (CSV-specific)
 
 Compares F_Name and L_Name against user_full_name per record:
 
 | Issue | Description | Score |
 |---|---|---|
 | **F/L Names Swapped** | F_Name looks like a surname, L_Name looks like a given name | 9 |
-| **Name Part Missing** | First or last name not found in the full name | 8 |
+| **Name Part Missing** | First or last name not found in the full name (or any field is empty) | 8 |
 | **Fields Mismatch** | Full name doesn't contain either first or last name | 8 |
 | **Extra in Full Name** | Full name has parts not in F_Name/L_Name (middle names, suffixes) | 2 |
 
-### Per-Name Detection
+### Layer 2: Per-Name Detection
 
 Runs on the `user_full_name` field:
 
@@ -59,6 +62,7 @@ Runs on the `user_full_name` field:
 | **Capitalization** | ALL CAPS, all lowercase, inverted case, uncapitalized parts | 6-9 |
 | **Data Error** | Numbers, special characters, placeholders, mojibake, invisible chars, formula injection, concatenated names, repeated parts | 8-10 |
 | **Unusual Format** | Mixed ALL-CAPS parts, parenthetical nicknames, S/O D/O W/O patterns | 2 |
+| **Accented Characters** | Diacritics or special chars (é, ñ, ü, ø, ß, etc.) — can be normalized to English | 2 |
 | **Duplicate** | Exact match after normalizing case, diacritics, and non-alpha characters | 9 |
 | **Near Duplicate** | Edit distance within threshold (catches typos like "Micheal"/"Michael") | 5 |
 | **Single Initial** | Single-letter tokens that may indicate truncation | 3 |
@@ -67,7 +71,7 @@ Runs on the `user_full_name` field:
 | **Merged Entry** | Contains "&" or "and" suggesting two people in one field | 9 |
 | **Possibly Truncated** | Raw input has trailing whitespace suggesting field-length cutoff | 5 |
 
-### List-Context Analysis
+### Layer 3: List-Context Analysis
 
 Uses the full list to find issues that can't be detected per-name:
 
@@ -98,22 +102,30 @@ Three methods, applied in order:
 
 ## Smart Title Case (Suggestion Engine)
 
-When suggesting fixes, the engine respects:
+When suggesting fixes, the engine:
 
-- **Particles** — lowercase mid-name: de, del, da, van, von, al, bin, etc. (53 particles)
-- **Mc/Mac prefixes** — McDonald, MacArthur
-- **O' apostrophe names** — O'Brien, O'Connor
-- **CamelCase prefixes** — DiMasi, DeLuca, LaForge, LeBron
-- **Unknown internal caps** — InJoo, SunHee, JiYeon (preserved)
-- **Hyphenated names** — Jean-Pierre, Anna-Lise
-- **Suffixes** — Jr., Sr., II, III, IV
-- **al-/el- prefixes** — Al-Rashid, El-Sayed
+1. **Strips titles** — Dr., Mr., Mrs., Prof., etc.
+2. **Reorders "Last, First"** → "First Last"
+3. **Removes invalid characters** (numbers, special chars)
+4. **Applies smart title case** respecting:
+   - **Particles** — lowercase mid-name: de, del, da, van, von, al, bin, etc. (53 particles)
+   - **Mc/Mac prefixes** — McDonald, MacArthur
+   - **O' apostrophe names** — O'Brien, O'Connor
+   - **CamelCase prefixes** — DiMasi, DeLuca, LaForge, LeBron
+   - **Unknown internal caps** — InJoo, SunHee, JiYeon (preserved)
+   - **Hyphenated names** — Jean-Pierre, Anna-Lise
+   - **Suffixes** — Jr., Sr., II, III, IV
+   - **al-/el- prefixes** — Al-Rashid, El-Sayed
+5. **Normalizes accented characters** to English equivalents:
+   - `José` → `Jose`, `Müller` → `Muller`, `Søren` → `Soren`
+   - `François` → `Francois`, `Łukasz` → `Lukasz`
+6. **Reverses family-name-first** when detected (Kim Minho → Minho Kim)
 
 ### Suggestion Suppression
 
 Suggestions are NOT generated for:
 - Data errors (numbers, special characters)
-- Merged entries (can't auto-split)
+- Merged entries (can't auto-split "John & Mary Smith")
 - Truncated names (can't guess what was cut off)
 
 ---
@@ -221,7 +233,7 @@ Garcia Maria         Nguyen Thi Lan       Williams James
 
 ### CSV Export (`cleaned-names.csv`)
 
-Same three-column layout, CSV-formatted.
+Same three-column layout, CSV-formatted (no header row).
 
 ### Surname Sorting
 
@@ -251,7 +263,7 @@ Sorts by the last significant word, skipping suffixes (Jr., Sr., II, III):
 
 ## Technical Details
 
-- **Single file**: `index.html` (~1,480 lines)
+- **Single file**: `index.html` (~1,500 lines)
 - **Zero dependencies**: no frameworks, no build step, no API calls
 - **Performance**: exact duplicates O(n) via Map; fuzzy matching auto-disabled for lists >300 names
 - **Privacy**: all processing happens in the browser — no data is transmitted
