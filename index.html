@@ -18,6 +18,7 @@
     --tag-duplicate: #ccfbf1; --tag-duplicate-text: #065f46;
     --tag-initial: #fff7ed; --tag-initial-text: #9a3412;
     --tag-spelling: #fdf2f8; --tag-spelling-text: #831843;
+    --tag-accents: #ecfdf5; --tag-accents-text: #065f46;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
   .container { max-width: 1280px; margin: 0 auto; padding: 2rem 1rem; }
@@ -55,6 +56,7 @@
   .tag-duplicate { background: var(--tag-duplicate); color: var(--tag-duplicate-text); }
   .tag-initial { background: var(--tag-initial); color: var(--tag-initial-text); }
   .tag-spelling { background: var(--tag-spelling); color: var(--tag-spelling-text); }
+  .tag-accents { background: var(--tag-accents); color: var(--tag-accents-text); }
   .action-btns { display: flex; gap: 0.3rem; }
   .action-btns button { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; }
   .filter-bar { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: center; }
@@ -148,7 +150,7 @@ const ISSUE_TYPES = {
   xfield_mismatch: { label: 'Fields Mismatch', cls: 'tag-data', confidence: 'high' },
   xfield_swapped: { label: 'F/L Names Swapped', cls: 'tag-reversed', confidence: 'high' },
   xfield_extra: { label: 'Extra in Full Name', cls: 'tag-format', confidence: 'low' },
-  accents:   { label: 'Accented Characters', cls: 'tag-format', confidence: 'low' },
+  accents:   { label: 'Accented Characters', cls: 'tag-accents', confidence: 'low' },
 };
 
 // Per-issue confidence can be overridden by detection logic
@@ -515,7 +517,35 @@ function crossFieldCheck(fName, lName, fullName) {
   const fullLo = fullName.toLowerCase().trim();
   const fullParts = fullLo.split(/\s+/);
 
-  if (!fLo || !lLo || !fullLo) return { issues, details };
+  // Handle missing fields explicitly
+  if (!fullLo) {
+    if (fLo || lLo) {
+      issues.push('xfield_missing');
+      details.push('Full name field is empty (F_Name: "' + fName + '", L_Name: "' + lName + '")');
+    }
+    return { issues, details };
+  }
+  if (!fLo && !lLo) return { issues, details }; // only full name, nothing to compare
+  if (!fLo) {
+    if (!fullLo.includes(lLo)) {
+      issues.push('xfield_missing');
+      details.push('F_Name is empty and L_Name "' + lName + '" not found in full name');
+    } else {
+      issues.push('xfield_missing');
+      details.push('F_Name field is empty');
+    }
+    return { issues, details };
+  }
+  if (!lLo) {
+    if (!fullLo.includes(fLo)) {
+      issues.push('xfield_missing');
+      details.push('L_Name is empty and F_Name "' + fName + '" not found in full name');
+    } else {
+      issues.push('xfield_missing');
+      details.push('L_Name field is empty');
+    }
+    return { issues, details };
+  }
 
   const fullContainsFirst = fullParts.some(p => p === fLo || fullLo.includes(fLo));
   const fullContainsLast = fullParts.some(p => p === lLo || fullLo.includes(lLo));
@@ -600,8 +630,8 @@ function analyze() {
       dismissed: false,
     };
 
-    // Cross-field validation
-    if (fName && lName && entry.current) {
+    // Cross-field validation (also detects missing fields)
+    if (fName || lName || entry.current) {
       const xf = crossFieldCheck(fName, lName, entry.current);
       entry.issues.push(...xf.issues);
       entry.details.push(...xf.details);
