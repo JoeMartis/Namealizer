@@ -148,6 +148,7 @@ const ISSUE_TYPES = {
   xfield_mismatch: { label: 'Fields Mismatch', cls: 'tag-data', confidence: 'high' },
   xfield_swapped: { label: 'F/L Names Swapped', cls: 'tag-reversed', confidence: 'high' },
   xfield_extra: { label: 'Extra in Full Name', cls: 'tag-format', confidence: 'low' },
+  accents:   { label: 'Accented Characters', cls: 'tag-format', confidence: 'low' },
 };
 
 // Per-issue confidence can be overridden by detection logic
@@ -183,6 +184,7 @@ function getConfidence(issueType, detail) {
   if (issueType === 'initial') return 3;
   if (issueType === 'spelling') return 3;
   if (issueType === 'format') return 2;
+  if (issueType === 'accents') return 2;
   if (issueType === 'listformat') return 5;
   if (issueType === 'listswapped') return 9;
   if (issueType === 'xfield_missing') return 8;
@@ -663,6 +665,8 @@ function issueDetail(issueType, name) {
       return 'Possible two people in one entry (contains "&" or "and")';
     case 'truncated':
       return 'Name may be truncated (' + clean.length + ' chars, ends abruptly)';
+    case 'accents':
+      return 'Contains accented characters — can be normalized to English';
     case 'xfield_missing':
       return 'First or last name missing from full name';
     case 'xfield_mismatch':
@@ -771,6 +775,13 @@ function detectIssues(name) {
       if (seen.has(p)) { issues.push('data'); break; }
       seen.add(p);
     }
+  }
+
+  // Names with accented/special characters that could be normalized to English
+  if (/[^\x00-\x7F]/.test(trimmed)) {
+    const hasDiacritics = trimmed !== trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const hasSpecial = /[øØæÆßðÐþÞłŁđĐ]/.test(trimmed);
+    if (hasDiacritics || hasSpecial) issues.push('accents');
   }
 
   // Possible typo: excessive consecutive consonants (language-aware)
@@ -1015,6 +1026,16 @@ function suggestFix(name) {
   // Smart title case
   fixed = smartTitleCase(fixed);
 
+  // Normalize diacritics/accented characters to English equivalents
+  fixed = fixed.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ø/g,'o').replace(/Ø/g,'O')
+    .replace(/æ/g,'ae').replace(/Æ/g,'Ae')
+    .replace(/ß/g,'ss')
+    .replace(/ð/g,'d').replace(/Ð/g,'D')
+    .replace(/þ/g,'th').replace(/Þ/g,'Th')
+    .replace(/ł/g,'l').replace(/Ł/g,'L')
+    .replace(/đ/g,'d').replace(/Đ/g,'D');
+
   // Reversed name fix
   const parts = fixed.split(' ');
   const nonParticle = parts.filter(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
@@ -1118,8 +1139,9 @@ function titleWord(s) {
   }
 
   // If already capitalized and has intentional internal caps we don't recognize,
-  // preserve original casing (e.g. InJoo, SunHee, JiYeon, DeAndre)
-  if (s[0] === s[0].toUpperCase() && s.length > 2 &&
+  // preserve original casing (e.g. InJoo, SunHee, JiYeon, DeAndre).
+  // BUT skip if the whole word is uppercase (e.g. JOHNSON should still become Johnson)
+  if (s !== s.toUpperCase() && s[0] === s[0].toUpperCase() && s.length > 2 &&
       s.slice(1).split('').some(c => c === c.toUpperCase() && c !== c.toLowerCase())) {
     return s;
   }
