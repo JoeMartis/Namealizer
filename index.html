@@ -1066,7 +1066,7 @@ function suggestFix(name) {
     .replace(/ł/g,'l').replace(/Ł/g,'L')
     .replace(/đ/g,'d').replace(/Đ/g,'D');
 
-  // Reversed name fix
+  // Reversed name fix — preserve particles (de, van, al, etc.)
   const parts = fixed.split(' ');
   const nonParticle = parts.filter(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
   if (nonParticle.length >= 2 && !/,/.test(name)) {
@@ -1074,13 +1074,16 @@ function suggestFix(name) {
     const last = nonParticle[nonParticle.length - 1].toLowerCase();
 
     // Classic reversal: "Smith John" -> "John Smith"
-    if (COMMON_LAST.has(first) && COMMON_FIRST.has(last) && !COMMON_FIRST.has(first)) {
-      // Move first token to end
-      fixed = [...nonParticle.slice(1), nonParticle[0]].join(' ');
-    }
-    // East Asian family-name-first: "Kim Minho" -> "Minho Kim"
-    else if (FAMILY_FIRST_SURNAMES.has(first) && !nonParticle.slice(1).every(p => FAMILY_FIRST_SURNAMES.has(p.toLowerCase()))) {
-      fixed = [...nonParticle.slice(1), nonParticle[0]].join(' ');
+    // Or: "Cruz de la Maria" -> "Maria de la Cruz" (preserving particles)
+    if ((COMMON_LAST.has(first) && COMMON_FIRST.has(last) && !COMMON_FIRST.has(first)) ||
+        (FAMILY_FIRST_SURNAMES.has(first) && !nonParticle.slice(1).every(p => FAMILY_FIRST_SURNAMES.has(p.toLowerCase())))) {
+      // Find the first non-particle token and move it to the end, keeping everything else in order
+      const firstNPIdx = parts.findIndex(p => !SINGLE_PARTICLES.has(p.toLowerCase()));
+      if (firstNPIdx >= 0) {
+        const moved = parts.splice(firstNPIdx, 1)[0];
+        parts.push(moved);
+        fixed = parts.join(' ');
+      }
     }
   }
 
