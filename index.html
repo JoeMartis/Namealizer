@@ -69,8 +69,11 @@
   .issue-detail { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
   .conf-cell { text-align: center; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   @media (max-width: 768px) {
-    .results-table th:nth-child(5), .results-table td:nth-child(5) { display: none; }
-    .results-table th:nth-child(3), .results-table td:nth-child(3) { display: none; }
+    /* Hide F_Name, L_Name, and Score on small screens — keep the editable
+       Full Name input and Suggested Fix visible */
+    .results-table th:nth-child(1), .results-table td:nth-child(1) { display: none; }
+    .results-table th:nth-child(2), .results-table td:nth-child(2) { display: none; }
+    .results-table th:nth-child(7), .results-table td:nth-child(7) { display: none; }
   }
 </style>
 </head>
@@ -493,6 +496,8 @@ const FAMILY_FIRST_SURNAMES = new Set([
 function parseCSVLine(line) {
   // Handle quoted CSV fields: "Smith, Jr.",John,"John Smith, Jr."
   // Also handles escaped quotes: "Smith""Jr" → Smith"Jr
+  // Fields are NOT trimmed here — trailing whitespace is a truncation
+  // signal that detectIssues needs to see. Callers trim where needed.
   const fields = [];
   let current = '';
   let inQuotes = false;
@@ -502,20 +507,34 @@ function parseCSVLine(line) {
       if (inQuotes && line[i + 1] === '"') { current += '"'; i++; continue; } // escaped ""
       inQuotes = !inQuotes; continue;
     }
-    if ((ch === ',' || ch === '\t') && !inQuotes) { fields.push(current.trim()); current = ''; continue; }
+    if ((ch === ',' || ch === '\t') && !inQuotes) { fields.push(current); current = ''; continue; }
     current += ch;
   }
-  fields.push(current.trim());
+  fields.push(current);
   return fields;
+}
+
+// Accent/case folding for cross-field comparisons — accepting a
+// normalization suggestion (José → Jose) must not trigger a false
+// "not found in full name" flag afterwards
+function foldName(s) {
+  return s.toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ø/g,'o').replace(/æ/g,'ae').replace(/ß/g,'ss')
+    .replace(/ð/g,'d').replace(/þ/g,'th').replace(/ł/g,'l').replace(/đ/g,'d');
 }
 
 function crossFieldCheck(fName, lName, fullName) {
   const issues = [];
   const details = [];
-  const fLo = fName.toLowerCase().trim();
-  const lLo = lName.toLowerCase().trim();
-  const fullLo = fullName.toLowerCase().trim();
-  const fullParts = fullLo.split(/\s+/);
+  const fLo = foldName(fName);
+  const lLo = foldName(lName);
+  const fullLo = foldName(fullName);
+  const fullParts = fullLo.split(/\s+/).filter(Boolean);
+
+  // Token-level containment — plain substring matching was too lax
+  // ("Ann" would be "found" inside "Joanne")
+  const containsTokens = s => s.split(/\s+/).every(w => fullParts.includes(w));
 
   // Handle missing fields explicitly
   if (!fullLo) {
@@ -527,7 +546,7 @@ function crossFieldCheck(fName, lName, fullName) {
   }
   if (!fLo && !lLo) return { issues, details }; // only full name, nothing to compare
   if (!fLo) {
-    if (!fullLo.includes(lLo)) {
+    if (!containsTokens(lLo)) {
       issues.push('xfield_missing');
       details.push('F_Name is empty and L_Name "' + lName + '" not found in full name');
     } else {
@@ -537,7 +556,7 @@ function crossFieldCheck(fName, lName, fullName) {
     return { issues, details };
   }
   if (!lLo) {
-    if (!fullLo.includes(fLo)) {
+    if (!containsTokens(fLo)) {
       issues.push('xfield_missing');
       details.push('L_Name is empty and F_Name "' + fName + '" not found in full name');
     } else {
@@ -547,12 +566,14 @@ function crossFieldCheck(fName, lName, fullName) {
     return { issues, details };
   }
 
-  const fullContainsFirst = fullParts.some(p => p === fLo || fullLo.includes(fLo));
-  const fullContainsLast = fullParts.some(p => p === lLo || fullLo.includes(lLo));
+  const fullContainsFirst = containsTokens(fLo);
+  const fullContainsLast = containsTokens(lLo);
 
-  // Check if F/L names are swapped: full name contains last name first, or F_Name matches common last names
-  const fullStartsWithLast = fullParts[0] === lLo || fullLo.startsWith(lLo);
-  const fullEndsWithFirst = fullParts[fullParts.length - 1] === fLo;
+  // Check if F/L names are swapped: full name starts with the last name and ends with the first name
+  const fTokens = fLo.split(/\s+/);
+  const lTokens = lLo.split(/\s+/);
+  const fullStartsWithLast = fullParts[0] === lTokens[0];
+  const fullEndsWithFirst = fullParts[fullParts.length - 1] === fTokens[fTokens.length - 1];
   if (fullContainsFirst && fullContainsLast && fullStartsWithLast && fullEndsWithFirst && fLo !== lLo) {
     issues.push('xfield_swapped');
     details.push('F_Name "' + fName + '" and L_Name "' + lName + '" appear swapped (full name: "' + fullName + '")');
@@ -592,10 +613,12 @@ function crossFieldCheck(fName, lName, fullName) {
 }
 
 function analyze() {
-  const raw = document.getElementById('nameInput').value;
+  // Strip UTF-8 BOM (Excel exports) so header detection works,
+  // and split on CRLF/CR so \r doesn't leak into the last field
+  const raw = document.getElementById('nameInput').value.replace(/^\uFEFF/, '');
   if (!raw.trim()) return;
 
-  const lines = raw.split('\n').filter(l => l.trim().length > 0);
+  const lines = raw.split(/\r\n?|\n/).filter(l => l.trim().length > 0);
 
   // Skip header row if it looks like one
   let startIdx = 0;
@@ -611,35 +634,30 @@ function analyze() {
     const fields = parseCSVLine(line);
     const fName = (fields[0] || '').trim();
     const lName = (fields[1] || '').trim();
-    const name = (fields[2] || '').trim() || (fName + ' ' + lName).trim(); // fallback to concat
+    const rawFull = fields[2] || ''; // untrimmed — trailing whitespace signals truncation
+    const synthesizedFull = !rawFull.trim();
+    const name = synthesizedFull ? (fName + ' ' + lName).trim() : rawFull; // fallback to concat
 
     const issues = detectIssues(name);
     const NO_AUTOFIX = ['data', 'merged', 'truncated'];
     const suggestion = issues.length > 0 && !issues.some(ii => NO_AUTOFIX.includes(ii)) ? suggestFix(name) : '';
 
-    const entry = {
+    return {
       id: i,
       original: name,
       current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(),
       fName: fName,
       lName: lName,
+      synthesizedFull: synthesizedFull,
       issues: issues,
       details: issues.map(iss => issueDetail(iss, name)),
       suggestion: suggestion,
       accepted: false,
       dismissed: false,
     };
-
-    // Cross-field validation (also detects missing fields)
-    if (fName || lName || entry.current) {
-      const xf = crossFieldCheck(fName, lName, entry.current);
-      entry.issues.push(...xf.issues);
-      entry.details.push(...xf.details);
-    }
-
-    return entry;
   });
 
+  applyCrossFieldAll();
   markDuplicates(); markListContext();
   render();
   document.getElementById('resultsSection').style.display = '';
@@ -986,18 +1004,6 @@ function markListContext() {
     });
   }
 
-  // Case consistency: if >80% are title case and some are all-lower or all-upper
-  let titleCount = 0, otherCaseCount = 0;
-  active.forEach(e => {
-    const parts = e.current.split(/\s+/).filter(p => p.length > 1 && !SINGLE_PARTICLES.has(p.toLowerCase()));
-    if (parts.length > 0 && parts.every(p => p[0] === p[0].toUpperCase() && p.slice(1) !== p.slice(1).toUpperCase())) {
-      titleCount++;
-    } else if (parts.length > 0) {
-      otherCaseCount++;
-    }
-  });
-  // Don't add listformat if already flagged for caps (redundant)
-
   // --- 2. SWAPPED-NAME CROSS-REFERENCE ---
   // If "John Smith" and "Smith John" both appear, flag the less common ordering
   const nameNorm = new Map(); // normalized "first last" → entry index
@@ -1102,6 +1108,11 @@ function smartTitleCase(name) {
       const inner = token.slice(1, -1);
       return '(' + titleWord(inner) + ')';
     }
+
+    // Mid-name particles stay lowercase — checked before suffixes so
+    // connectors like Catalan/Portuguese "i"/"e" aren't mistaken for
+    // Roman numerals ("Maria i Garcia", not "Maria I Garcia")
+    if (SINGLE_PARTICLES.has(lo) && idx > 0 && idx < tokens.length - 1) return lo;
 
     // Keep suffixes in proper form
     if (SUFFIXES.has(lo)) {
@@ -1298,9 +1309,12 @@ function normalizeDisplay(s) {
 }
 
 function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
+  // Must escape quotes too — esc() output is interpolated into HTML
+  // attributes (value="..."), where an unescaped quote in CSV content
+  // would break out of the attribute and inject markup/event handlers
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function setFilter(f) { activeFilter = f; render(); }
@@ -1308,20 +1322,22 @@ function setFilter(f) { activeFilter = f; render(); }
 
 function updateName(id, value) {
   entries[id].current = value;
+  entries[id].synthesizedFull = false; // user provided a real full name
   entries[id].issues = detectIssues(value);
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, value));
   const NO_AUTOFIX = ['data', 'merged', 'truncated'];
   entries[id].suggestion = entries[id].issues.length > 0 && !entries[id].issues.some(i => NO_AUTOFIX.includes(i)) ? suggestFix(value) : '';
-  stripContextIssues(); markDuplicates(); markListContext(); render();
+  stripContextIssues(); applyCrossFieldAll(); markDuplicates(); markListContext(); render();
 }
 
 function acceptSuggestion(id) {
   entries[id].current = entries[id].suggestion;
   entries[id].accepted = true;
+  entries[id].synthesizedFull = false;
   entries[id].issues = detectIssues(entries[id].current);
   entries[id].details = entries[id].issues.map(iss => issueDetail(iss, entries[id].current));
   entries[id].suggestion = suggestFix(entries[id].current);
-  stripContextIssues();
+  stripContextIssues(); applyCrossFieldAll();
   markDuplicates(); markListContext();
   render();
 }
@@ -1330,7 +1346,7 @@ function dismissEntry(id) { entries[id].dismissed = true; render(); }
 
 function undoAllDismissed() {
   entries.forEach(e => { e.dismissed = false; });
-  stripContextIssues();
+  stripContextIssues(); applyCrossFieldAll();
   markDuplicates(); markListContext();
   render();
 }
@@ -1340,12 +1356,13 @@ function acceptAllSuggestions() {
     if (e.suggestion && !e.accepted && !e.dismissed) {
       e.current = e.suggestion;
       e.accepted = true;
+      e.synthesizedFull = false;
       e.issues = detectIssues(e.current);
       e.details = e.issues.map(iss => issueDetail(iss, e.current));
       e.suggestion = suggestFix(e.current);
     }
   });
-  stripContextIssues();
+  stripContextIssues(); applyCrossFieldAll();
   markDuplicates(); markListContext();
   render();
 }
@@ -1364,6 +1381,21 @@ function stripContextIssues() {
     }
     e.issues = keep;
     e.details = keepDetails;
+  });
+}
+
+// Re-run cross-field validation for all active entries. Must be called after
+// every mutation (edit, accept, undo) because stripContextIssues removes
+// xfield_* issues — without this they'd never be recomputed.
+function applyCrossFieldAll() {
+  entries.forEach(e => {
+    if (e.dismissed) return;
+    if (!(e.fName || e.lName || e.current)) return;
+    // A synthesized full name (built from F+L because the source field was
+    // empty) is validated against '' so the empty field gets flagged, not masked
+    const xf = crossFieldCheck(e.fName, e.lName, e.synthesizedFull ? '' : e.current);
+    e.issues.push(...xf.issues);
+    e.details.push(...xf.details);
   });
 }
 
