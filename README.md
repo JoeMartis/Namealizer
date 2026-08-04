@@ -245,29 +245,50 @@ Sorts by the last significant word, skipping suffixes (Jr., Sr., II, III):
 
 ## UI
 
+The interface uses the **Modernist** design system: flush-left composition, zero corner radius, 2px rules between sections and 1px within, accent red reserved for primary actions and high-confidence flags. Archivo is embedded as a data URI, so the app renders correctly offline and makes no external requests.
+
+### Input & controls
+
 | Control | Description |
 |---|---|
-| **Analyze Names** | Parse CSV and run all detections |
-| **Load File** | Browse for a .csv/.txt/.tsv file |
-| **Drag & Drop** | Drop a file onto the textarea |
-| **Load Sample** | Load example CSV with various issue types |
-| **Filter bar** | All / Issues / Clean, then per-issue-type filters with counts |
-| **Inline edit** | Click any name to edit directly |
-| **Accept** | Apply suggested fix for one name |
-| **Dismiss** | Remove flagged name from results (undo available) |
-| **Accept All Suggestions** | Batch-apply all suggestions (sticky bottom bar) |
-| **Copy to Clipboard** | Copy all active names |
-| **Export CSV / Export Text** | Download cleaned names |
+| **Analyze names** | Parse CSV and run all detections |
+| **Load file** | Browse for a .csv/.txt/.tsv file |
+| **Drag & drop** | Drop a file onto the textarea |
+| **Load sample** | Load example CSV with various issue types |
+| **Score to flag red** | Threshold at which a flag renders accent red and semibold — 8 and up / 5 and up / Every flag |
+| **Names with no issues** | List them / Hide them |
+| **Issue explanations** | Show or hide the detail line under each flag |
+| **Filter chips** | All / Issues / Clean, then one chip per active issue type with counts |
+
+### Results table
+
+Eight columns: **Row** (stable source row number, never renumbered by filtering or removal), **Score**, **F_Name**, **L_Name**, **Full name** (editable), **Issues**, **Suggested fix**, **Actions**.
+
+Each flag in the Issues column renders as a severity bar, the flag label, its explanation, and a **×** to dismiss that flag alone — the name stays in the list, the counts and the exports. Dismissing a duplicate flag clears it across the whole duplicate group, since clearing one side would leave the other copy pointing at a row that no longer shows the flag.
+
+| Action | Description |
+|---|---|
+| **Inline edit** | Edit any full name directly; the row re-analyzes and list-context checks re-run |
+| **Accept fix** | Apply the suggested fix for one name |
+| **Remove name** | Drop a name from the table, counts and exports (restorable) |
+| **Accept all fixes** | Batch-apply every pending suggestion |
+| **Copy to clipboard** | Copy all active names |
+| **Export CSV / Export text** | Download cleaned names |
+
+Undo lines appear below the table whenever names have been removed or flags dismissed, each with a restore button.
 
 ---
 
 ## Technical Details
 
-- **Single file**: `index.html` (~1,500 lines)
-- **Zero dependencies**: no frameworks, no build step, no API calls
+- **Single file**: `index.html` — detection engine, UI and embedded font
+- **Zero dependencies**: no frameworks, no build step, no API calls, no external requests
 - **Performance**: exact duplicates O(n) via Map; fuzzy matching auto-disabled for lists >300 names
 - **Privacy**: all processing happens in the browser — no data is transmitted
 - **Browser support**: any modern browser (Chrome, Firefox, Safari, Edge)
+- **Desktop-first**: the eight-column table and control band assume a wide viewport
+
+The engine is exposed as `window.NA` (`analyzeText`, `recompute`, `recontext`, `suggestFix`, `detectIssues`, `ISSUE_TYPES`, …) and the UI layer is plain DOM on top of it, so detection can be tested or reused without the interface.
 
 ---
 
