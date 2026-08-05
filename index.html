@@ -971,16 +971,14 @@ function crossFieldCheck(fName, lName, fullName) {
 function applyCrossFieldAll() {
   entries.forEach(e => {
     if (e.dismissed) return;
-    if (e.synthesizedFull) {
-      e.issues.push('xfield_missing');
-      e.details.push('Full name field is empty (showing F_Name + L_Name instead)');
-      return;
-    }
-    if (e.fName || e.lName || e.current) {
-      const xf = crossFieldCheck(e.fName, e.lName, e.current);
-      e.issues.push(...xf.issues);
-      e.details.push(...xf.details);
-    }
+    if (!(e.fName || e.lName || e.current)) return;
+    // A synthesized full name (built from F+L because the source field was
+    // empty) is validated against '' so the empty field gets flagged, not
+    // masked. Routing it through crossFieldCheck rather than pushing the flag
+    // directly keeps one code path shared with the non-redesign branch.
+    const xf = crossFieldCheck(e.fName, e.lName, e.synthesizedFull ? '' : e.current);
+    e.issues.push(...xf.issues);
+    e.details.push(...xf.details);
   });
 }
 
@@ -1228,9 +1226,9 @@ function markDuplicates() {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/ø/g,'o').replace(/æ/g,'ae').replace(/ß/g,'ss')
     .replace(/ð/g,'d').replace(/þ/g,'th').replace(/ł/g,'l')
-    .replace(/[''ʼ’‘]/g, "'")
+    .replace(/['\u2019\u2018\u02BC]/g, "'")
     .replace(/[\u200B\u200C\u200D\uFEFF\u00AD]/g, '')
-    .replace(/ /g, ' ')
+    .replace(/\u00A0/g, ' ')
     .replace(/[^a-z]/g, '');
 
   const norms = entries.map(e => normalize(e.current));
@@ -1920,8 +1918,13 @@ function render() {
     ? 'Near-duplicate matching skipped — over ' + NA.FUZZY_LIMIT + ' names' : '';
 
   const tbody = document.getElementById('resultsBody');
+  // Distinguish "the filter hid everything" from "there was nothing to read" —
+  // a header-only paste parses to zero entries, which is not a filter problem
+  const emptyMsg = total === 0
+    ? 'No names found. Check that the CSV has data rows below the header.'
+    : 'No names match the current filter.';
   tbody.innerHTML = filtered.length === 0
-    ? '<tr><td colspan="8" class="empty-cell">No names match the current filter.</td></tr>'
+    ? '<tr><td colspan="8" class="empty-cell">' + emptyMsg + '</td></tr>'
     : filtered.map(e => rowHTML(e, highAt)).join('');
 
   const removedCount = entries.filter(e => e.removed).length;
