@@ -134,6 +134,11 @@
 <script>
 let entries = [];
 let activeFilter = 'all';
+// Above this many names, near-duplicate (fuzzy) matching is skipped: it is
+// O(n²) Levenshtein. fuzzySkipped records whether that happened so the UI
+// can say so rather than implying a clean result.
+const FUZZY_LIMIT = 300;
+let fuzzySkipped = false;
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -620,13 +625,16 @@ function analyze() {
 
   const lines = raw.split(/\r\n?|\n/).filter(l => l.trim().length > 0);
 
-  // Skip header row if it looks like one
+  // Skip header row if it looks like one. Require at least two header-ish
+  // fields: a real header matches all three, while a data row that happens to
+  // start with one ("Frank,Last,Frank Last") matches only one and is kept.
+  // Checked even for a single line, so a header-only paste yields no rows
+  // instead of one entry named "user_full_name".
   let startIdx = 0;
-  if (lines.length > 1) {
-    const firstFields = parseCSVLine(lines[0]);
-    const headerish = firstFields.some(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, '')));
-    if (headerish) startIdx = 1;
-  }
+  const firstFields = parseCSVLine(lines[0]);
+  const headerish = firstFields
+    .filter(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, ''))).length >= 2;
+  if (headerish) startIdx = 1;
 
   const dataLines = lines.slice(startIdx);
 
@@ -935,8 +943,11 @@ function markDuplicates() {
     }
   }
 
-  // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow)
-  if (entries.length > 300) return;
+  // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow).
+  // Surfaced in the stats bar — silently dropping a whole detection reads
+  // as "no near-duplicates found" when it means "we didn't look".
+  fuzzySkipped = entries.length > FUZZY_LIMIT;
+  if (fuzzySkipped) return;
 
   for (let i = 0; i < entries.length; i++) {
     if (!active[i]) continue;
@@ -951,8 +962,12 @@ function markDuplicates() {
       if (norms[i].length >= 5 && norms[j].length >= 5) {
         const dist = editDistance(norms[i], norms[j]);
         const maxLen = Math.max(norms[i].length, norms[j].length);
-        // Allow 1-2 edits for short names, up to ~8% difference for longer names
-        const threshold = maxLen <= 10 ? 2 : Math.ceil(maxLen * 0.08);
+        // At least 2 edits at any length, scaling to ~8% for longer names.
+        // The old `maxLen <= 10 ? 2 : ceil(maxLen * 0.08)` dipped to 1 for
+        // lengths 11-12 — stricter than both shorter and longer names — so a
+        // single transposition in a normal full name went undetected
+        // ("michealsmith"/"michaelsmith" is distance 2 over 12 chars).
+        const threshold = Math.max(2, Math.round(maxLen * 0.08));
 
         if (dist > 0 && dist <= threshold) {
           if (!entries[i].issues.includes('neardupe') && !entries[i].issues.includes('duplicate')) {
@@ -1212,7 +1227,9 @@ function render() {
   document.getElementById('stats').innerHTML =
     `<span><strong>${total}</strong> names</span>` +
     `<span><strong>${withIssues}</strong> with issues</span>` +
-    `<span><strong>${total - withIssues}</strong> clean</span>`;
+    `<span><strong>${total - withIssues}</strong> clean</span>` +
+    (fuzzySkipped ? `<span title="Near-duplicate matching is O(n²), so it is skipped on large lists">` +
+      `Near-duplicate matching skipped (over ${FUZZY_LIMIT} names)</span>` : '');
 
   // Dismissed bar
   const dismissedBar = document.getElementById('dismissedBar');

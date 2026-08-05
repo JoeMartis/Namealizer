@@ -64,7 +64,7 @@ Runs on the `user_full_name` field:
 | **Unusual Format** | Mixed ALL-CAPS parts, parenthetical nicknames, S/O D/O W/O patterns | 2 |
 | **Accented Characters** | Diacritics or special chars (é, ñ, ü, ø, ß, etc.) — can be normalized to English | 2 |
 | **Duplicate** | Exact match after normalizing case, diacritics, and non-alpha characters | 9 |
-| **Near Duplicate** | Edit distance within threshold (catches typos like "Micheal"/"Michael") | 5 |
+| **Near Duplicate** | Edit distance within threshold — at least 2 edits, scaling to ~8% of length (catches typos like "Micheal"/"Michael") | 5 |
 | **Single Initial** | Single-letter tokens that may indicate truncation | 3 |
 | **Possible Typo** | 5+ consecutive consonants or triple-repeated characters | 3 |
 | **Has Title/Honorific** | Dr., Mr., Mrs., Prof., Rev., military ranks (requires period) | 8 |
@@ -233,7 +233,14 @@ Garcia Maria         Nguyen Thi Lan       Williams James
 
 ### CSV Export (`cleaned-names.csv`)
 
-Same three-column layout, CSV-formatted (no header row).
+Three names per row, CSV-formatted (no header row).
+
+Note the two exports fill their three columns in **different reading orders**, deliberately:
+
+- **Text** is column-major — read straight down column 1, then column 2, as on a printed list.
+- **CSV** is row-major — three names per row, left to right, so a spreadsheet reads in order.
+
+The same list therefore arranges differently in the two files.
 
 ### Surname Sorting
 
