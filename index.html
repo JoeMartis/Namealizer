@@ -402,6 +402,7 @@ tr.row-clean { opacity: 0.5; }
     <div class="results-head">
       <h2>Results</h2>
       <span class="shown-label" id="shownLabel"></span>
+      <span class="shown-label" id="fuzzyNotice" style="display: none; color: var(--color-accent);"></span>
     </div>
 
     <div class="control-band">
@@ -482,6 +483,11 @@ tr.row-clean { opacity: 0.5; }
 if (!window.NA) { (function () {
 let entries = [];
 let activeFilter = 'all';
+// Above this many names, near-duplicate (fuzzy) matching is skipped: it is
+// O(n²) Levenshtein. fuzzySkipped records whether that happened so the UI
+// can say so rather than implying a clean result.
+const FUZZY_LIMIT = 300;
+let fuzzySkipped = false;
 
 const ISSUE_TYPES = {
   reversed:  { label: 'Possibly Reversed', cls: 'tag-reversed', confidence: 'medium' },
@@ -978,55 +984,6 @@ function applyCrossFieldAll() {
   });
 }
 
-function analyze() {
-  const raw = document.getElementById('nameInput').value;
-  if (!raw.trim()) return;
-
-  const lines = raw.split('\n').filter(l => l.trim().length > 0);
-
-  // Skip header row if it looks like one
-  let startIdx = 0;
-  if (lines.length > 1) {
-    const firstFields = parseCSVLine(lines[0]);
-    const headerish = firstFields.some(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, '')));
-    if (headerish) startIdx = 1;
-  }
-
-  const dataLines = lines.slice(startIdx);
-
-  entries = dataLines.map((line, i) => {
-    const fields = parseCSVLine(line);
-    const fName = (fields[0] || '').trim();
-    const lName = (fields[1] || '').trim();
-    const rawFull = fields[2] || ''; // untrimmed — trailing whitespace signals truncation
-    const name = rawFull.trim() ? rawFull : (fName + ' ' + lName).trim(); // fallback to concat
-
-    const issues = detectIssues(name);
-    const NO_AUTOFIX = ['data', 'merged', 'truncated'];
-    const suggestion = issues.length > 0 && !issues.some(ii => NO_AUTOFIX.includes(ii)) ? suggestFix(name) : '';
-
-    return {
-      id: i,
-      original: name,
-      current: name.replace(/\t/g, ' ').replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim(),
-      fName: fName,
-      lName: lName,
-      synthesizedFull: !rawFull.trim() && !!(fName || lName), // full name field was empty; built from F+L
-      issues: issues,
-      details: issues.map(iss => issueDetail(iss, name)),
-      suggestion: suggestion,
-      accepted: false,
-      dismissed: false,
-    };
-  });
-
-  applyCrossFieldAll();
-  markDuplicates(); markListContext();
-  render();
-  document.getElementById('resultsSection').style.display = '';
-  document.getElementById('actionBar').style.display = '';
-}
-
 function issueDetail(issueType, name) {
   // Clean version for analysis (strip quotes, tabs)
   const clean = name.replace(/^"|"$/g, '').replace(/\t/g, ' ').trim();
@@ -1298,8 +1255,11 @@ function markDuplicates() {
     }
   }
 
-  // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow)
-  if (entries.length > 300) return;
+  // Skip fuzzy matching for large lists (O(n²) Levenshtein is too slow).
+  // Surfaced in the UI — silently dropping a whole detection reads as
+  // "no near-duplicates found" when it means "we didn't look".
+  fuzzySkipped = entries.length > FUZZY_LIMIT;
+  if (fuzzySkipped) return;
 
   for (let i = 0; i < entries.length; i++) {
     if (!active[i]) continue;
@@ -1314,8 +1274,12 @@ function markDuplicates() {
       if (norms[i].length >= 5 && norms[j].length >= 5) {
         const dist = editDistance(norms[i], norms[j]);
         const maxLen = Math.max(norms[i].length, norms[j].length);
-        // Allow 1-2 edits for short names, up to ~8% difference for longer names
-        const threshold = maxLen <= 10 ? 2 : Math.ceil(maxLen * 0.08);
+        // At least 2 edits at any length, scaling to ~8% for longer names.
+        // The old `maxLen <= 10 ? 2 : ceil(maxLen * 0.08)` dipped to 1 for
+        // lengths 11-12 — stricter than both shorter and longer names — so a
+        // single transposition in a normal full name went undetected
+        // ("michealsmith"/"michaelsmith" is distance 2 over 12 chars).
+        const threshold = Math.max(2, Math.round(maxLen * 0.08));
 
         if (dist > 0 && dist <= threshold) {
           if (!entries[i].issues.includes('neardupe') && !entries[i].issues.includes('duplicate')) {
@@ -1632,15 +1596,6 @@ function exportCSV() {
   download(csvRows.join('\n'), 'cleaned-names.csv', 'text/csv');
 }
 
-function copyToClipboard(btn) {
-  const names = entries.filter(e => !e.dismissed).map(e => e.current).join('\n');
-  navigator.clipboard.writeText(names).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = 'Copied!';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  });
-}
-
 function download(content, filename, mime) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -1681,12 +1636,16 @@ function analyzeText(raw) {
   // and split on CRLF/CR so \r doesn't leak into the last field
   raw = raw.replace(/^\uFEFF/, '');
   const lines = raw.split(/\r\n?|\n/).filter(l => l.trim().length > 0);
+  // Skip a header row if it looks like one. Require at least two header-ish
+  // fields: a real header matches all three, while a data row that merely
+  // starts with a header word ("Frank,Last,Frank Last") matches one and is
+  // kept. Checked even for a single line, so a header-only paste yields no
+  // rows instead of one entry named "user_full_name".
   let startIdx = 0;
-  if (lines.length > 1) {
-    const firstFields = parseCSVLine(lines[0]);
-    const headerish = firstFields.some(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, '')));
-    if (headerish) startIdx = 1;
-  }
+  const firstFields = parseCSVLine(lines[0]);
+  const headerish = firstFields
+    .filter(f => /^(f_?name|l_?name|first|last|full|user)/i.test(f.replace(/\s+/g, ''))).length >= 2;
+  if (headerish) startIdx = 1;
   entries = lines.slice(startIdx).map((line, i) => {
     const fields = parseCSVLine(line);
     const fName = (fields[0] || '').trim();
@@ -1717,7 +1676,8 @@ function recompute(e) {
 function recontext() { stripContextIssues(); applyCrossFieldAll(); markDuplicates(); markListContext(); }
 window.NA = { analyzeText, recompute, recontext, normalizeDisplay, detectIssues, issueDetail,
   suggestFix, getConfidence, scoreColor, ISSUE_TYPES, SAMPLE_CSV, exportTxt, exportCSV,
-  sortBySurname, threeColumnLayout, get entries() { return entries; } };
+  sortBySurname, threeColumnLayout, FUZZY_LIMIT,
+  get entries() { return entries; }, get fuzzySkipped() { return fuzzySkipped; } };
 
 })(); }
 
@@ -1777,8 +1737,14 @@ function clearAll() {
   render();
 }
 
+// A dismissed flag is a judgement about the value that was on screen. Once
+// the value changes, that judgement no longer applies — keeping it would
+// permanently hide a real problem in the new name.
+function clearDismissals(e) { e.ignored = []; e.dupOk = false; }
+
 function updateName(id, value) {
   const e = NA.entries[id];
+  if (value !== e.current) clearDismissals(e);
   e.current = value;
   e.synthesizedFull = false; // user provided a real full name
   NA.recompute(e);
@@ -1788,6 +1754,7 @@ function updateName(id, value) {
 
 function acceptFix(id) {
   const e = NA.entries[id];
+  clearDismissals(e);
   e.current = e.suggestion;
   e.accepted = true;
   e.synthesizedFull = false;
@@ -1800,6 +1767,7 @@ function acceptFix(id) {
 function acceptAll() {
   NA.entries.forEach(e => {
     if (e.suggestion && !e.accepted && !e.dismissed) {
+      clearDismissals(e);
       e.current = e.suggestion;
       e.accepted = true;
       e.synthesizedFull = false;
@@ -1917,6 +1885,12 @@ function render() {
 
   const issueCounts = {};
   active.forEach(e => visibleIssues(e).forEach(i => { issueCounts[i] = (issueCounts[i] || 0) + 1; }));
+
+  // An issue-type filter whose count has dropped to zero loses its chip, so
+  // nothing would be highlighted and the empty table would look unexplained.
+  // Fall back to All.
+  if (!['all', 'issues', 'clean'].includes(ui.filter) && !issueCounts[ui.filter]) ui.filter = 'all';
+
   const chips = [
     ['all', 'All', total],
     ['issues', 'Issues', withIssues],
@@ -1939,6 +1913,11 @@ function render() {
   }).filter(e => !(ui.hideClean && ui.filter !== 'clean' && visibleIssues(e).length === 0));
 
   document.getElementById('shownLabel').textContent = filtered.length + ' of ' + total + ' shown';
+
+  const fuzzyNotice = document.getElementById('fuzzyNotice');
+  fuzzyNotice.style.display = NA.fuzzySkipped ? '' : 'none';
+  fuzzyNotice.textContent = NA.fuzzySkipped
+    ? 'Near-duplicate matching skipped — over ' + NA.FUZZY_LIMIT + ' names' : '';
 
   const tbody = document.getElementById('resultsBody');
   tbody.innerHTML = filtered.length === 0
